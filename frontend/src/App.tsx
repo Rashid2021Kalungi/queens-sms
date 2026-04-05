@@ -1,11 +1,29 @@
 import { useCallback, useEffect, useState } from "react";
+import { apiUrl, authHeaders } from "./api/baseUrl";
 import { LoginPage } from "./LoginPage";
+import { PasswordResetPage } from "./PasswordResetPage";
 import { Dashboard } from "./Dashboard";
 import "./App.css";
 
 const REMEMBER_KEY = "junior_school_remembered_email";
 
-type MeResponse = { user: { sub: string; role: string; email: string } };
+const EMAIL_RE = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+
+type MeResponse = {
+  user: {
+    sub: string;
+    role: string;
+    email: string;
+    twoFactorEnabled?: boolean;
+  };
+};
+
+function maskEmailFor2fa(email: string): string {
+  const [local, domain] = email.split("@");
+  if (!domain || !local) return email;
+  const vis = local.slice(0, Math.min(2, local.length)) + "•••";
+  return `${vis}@${domain}`;
+}
 
 async function readJsonBody<T>(res: Response): Promise<T | null> {
   const text = await res.text();
@@ -18,9 +36,7 @@ async function readJsonBody<T>(res: Response): Promise<T | null> {
 }
 
 export default function App() {
-  const [email, setEmail] = useState(
-    () => localStorage.getItem(REMEMBER_KEY) ?? "admin@gmail.com",
-  );
+  const [email, setEmail] = useState(() => localStorage.getItem(REMEMBER_KEY) ?? "");
   const [password, setPassword] = useState("");
   const [token, setToken] = useState<string | null>(() =>
     localStorage.getItem("token"),
@@ -30,6 +46,13 @@ export default function App() {
   const [profileError, setProfileError] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [loading, setLoading] = useState(false);
+  const [authView, setAuthView] = useState<"login" | "reset">("login");
+  const [loginBanner, setLoginBanner] = useState<string | null>(null);
+  const [pending2FA, setPending2FA] = useState<{
+    token: string;
+    maskedEmail: string;
+    rememberEmail: boolean;
+  } | null>(null);
 
   const refreshProfile = useCallback(async () => {
     const t = localStorage.getItem("token");
@@ -40,25 +63,33 @@ export default function App() {
     setProfileLoading(true);
     setProfileError(null);
     try {
-      const res = await fetch("/api/auth/me", {
-        headers: { Authorization: `Bearer ${t}` },
+      const res = await fetch(apiUrl("/api/auth/me"), {
+        headers: authHeaders(),
       });
       const data = await readJsonBody<MeResponse & { error?: string }>(res);
       if (data === null) {
         setProfile(null);
-        setProfileError("Invalid response from server. Is the API running?");
+        setProfileError("Something went wrong. Please try again.");
         return;
       }
       if (!res.ok) {
         setProfile(null);
-        setProfileError(data.error ?? "Could not load profile");
+        if (res.status === 401) {
+          localStorage.removeItem("token");
+          setToken(null);
+          setProfileError(null);
+          return;
+        }
+        setProfileError(
+          data.error ?? "Something went wrong. Please try again.",
+        );
         return;
       }
       setProfile(data);
     } catch {
       setProfile(null);
       setProfileError(
-        "Cannot reach the API. Start the backend (npm run dev in backend).",
+        "We couldn’t connect to the server. Check your internet connection and try again.",
       );
     } finally {
       setProfileLoading(false);
@@ -74,47 +105,150 @@ export default function App() {
     }
   }, [token, refreshProfile]);
 
-  const login = useCallback(async () => {
-    setError(null);
-    setLoading(true);
-    try {
-      const res = await fetch("/api/auth/login", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ email, password }),
-      });
-      const data = await readJsonBody<{ token?: string; error?: string }>(res);
-      if (data === null) {
-        setError(
-          "The app did not get JSON from the server. Start the frontend with `npm run dev` in the frontend folder and open http://localhost:5173 (do not open dist/index.html directly).",
-        );
+  const login = useCallback(
+    async (opts: { rememberEmail: boolean }) => {
+      setError(null);
+      const trimmed = email.trim();
+      if (!trimmed) {
+        setError("Please enter your email address.");
         return;
       }
-      if (!res.ok) {
-        if (res.status === 503 && data.error === "Database unavailable") {
-          setError(
-            "Database unavailable — start MySQL in XAMPP, create database queensdb, and run backend/db/schema.sql in phpMyAdmin.",
-          );
+      if (!EMAIL_RE.test(trimmed)) {
+        setError("Please enter a valid email address.");
+        return;
+      }
+      if (!password) {
+        setError("Please enter your password.");
+        return;
+      }
+
+      setLoading(true);
+      try {
+        const res = await fetch(apiUrl("/api/auth/login"), {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            email: trimmed,
+            password,
+            rememberMe: opts.rememberEmail,
+          }),
+        });
+        const data = await readJsonBody<{
+          token?: string;
+          requiresTwoFactor?: boolean;
+          twoFactorToken?: string;
+          error?: string;
+        }>(res);
+        if (data === null) {
+          setError("Something went wrong. Please try again.");
           return;
         }
-        setError(data.error ?? "Login failed");
-        return;
+        if (!res.ok) {
+          if (res.status === 503 && data.error === "Database unavailable") {
+            setError(
+              "The service is temporarily unavailable. Please try again later.",
+            );
+            return;
+          }
+          if (res.status === 401) {
+            setError("Invalid email or password.");
+            return;
+          }
+          setError(data.error ?? "Sign-in failed. Please try again.");
+          return;
+        }
+        if (data.requiresTwoFactor && data.twoFactorToken) {
+          setPending2FA({
+            token: data.twoFactorToken,
+            maskedEmail: maskEmailFor2fa(trimmed),
+            rememberEmail: opts.rememberEmail,
+          });
+          setLoginBanner(null);
+          return;
+        }
+        if (!data.token) {
+          setError("Sign-in failed. Please try again.");
+          return;
+        }
+        localStorage.setItem("token", data.token);
+        if (opts.rememberEmail) {
+          localStorage.setItem(REMEMBER_KEY, trimmed);
+        } else {
+          localStorage.removeItem(REMEMBER_KEY);
+        }
+        setToken(data.token);
+        setPending2FA(null);
+        setLoginBanner(null);
+      } catch {
+        setError(
+          "We couldn’t connect to the server. Check your internet connection and try again.",
+        );
+      } finally {
+        setLoading(false);
       }
-      if (!data.token) {
-        setError("No token returned");
-        return;
+    },
+    [email, password],
+  );
+
+  const verifyTwoFactor = useCallback(
+    async (otp: string) => {
+      if (!pending2FA) return;
+      setError(null);
+      setLoading(true);
+      try {
+        const res = await fetch(apiUrl("/api/auth/verify-login-2fa"), {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            twoFactorToken: pending2FA.token,
+            otp,
+          }),
+        });
+        const data = await readJsonBody<{ token?: string; error?: string }>(res);
+        if (data === null) {
+          setError("Something went wrong. Please try again.");
+          return;
+        }
+        if (!res.ok) {
+          if (res.status === 503 && data.error === "Database unavailable") {
+            setError(
+              "The service is temporarily unavailable. Please try again later.",
+            );
+            return;
+          }
+          setError(data.error ?? "Verification failed. Try again.");
+          return;
+        }
+        if (!data.token) {
+          setError("Verification failed. Please try again.");
+          return;
+        }
+        localStorage.setItem("token", data.token);
+        if (pending2FA.rememberEmail) {
+          localStorage.setItem(REMEMBER_KEY, email.trim());
+        } else {
+          localStorage.removeItem(REMEMBER_KEY);
+        }
+        setToken(data.token);
+        setPending2FA(null);
+        setPassword("");
+        setLoginBanner(null);
+      } catch {
+        setError(
+          "We couldn’t connect to the server. Check your internet connection and try again.",
+        );
+      } finally {
+        setLoading(false);
       }
-      localStorage.setItem("token", data.token);
-      localStorage.setItem(REMEMBER_KEY, email.trim());
-      setToken(data.token);
-    } catch {
-      setError(
-        "Cannot reach the API. In a terminal run: cd backend → npm run dev (listen on port 4000). In another terminal: cd frontend → npm run dev, then use http://localhost:5173",
-      );
-    } finally {
-      setLoading(false);
-    }
-  }, [email, password]);
+    },
+    [pending2FA, email],
+  );
+
+  const cancelTwoFactor = useCallback(() => {
+    setPending2FA(null);
+    setPassword("");
+    setError(null);
+  }, []);
 
   const logout = useCallback(() => {
     localStorage.removeItem("token");
@@ -122,9 +256,26 @@ export default function App() {
     setProfile(null);
     setProfileError(null);
     setError(null);
+    setPassword("");
+    setPending2FA(null);
   }, []);
 
   if (!token) {
+    if (authView === "reset") {
+      return (
+        <PasswordResetPage
+          onBack={() => {
+            setAuthView("login");
+            setError(null);
+          }}
+          onSuccess={() => {
+            setAuthView("login");
+            setPassword("");
+            setLoginBanner("Password updated. Sign in with your new password.");
+          }}
+        />
+      );
+    }
     return (
       <LoginPage
         email={email}
@@ -134,6 +285,18 @@ export default function App() {
         onLogin={login}
         loading={loading}
         error={error}
+        defaultRememberEmail={Boolean(localStorage.getItem(REMEMBER_KEY))}
+        onForgotPassword={() => {
+          setAuthView("reset");
+          setError(null);
+        }}
+        successBanner={loginBanner}
+        onDismissSuccessBanner={() => setLoginBanner(null)}
+        twoFactorChallenge={
+          pending2FA ? { maskedEmail: pending2FA.maskedEmail } : null
+        }
+        onVerifyTwoFactor={verifyTwoFactor}
+        onCancelTwoFactor={cancelTwoFactor}
       />
     );
   }
@@ -145,6 +308,7 @@ export default function App() {
       profileError={profileError}
       onRetryProfile={refreshProfile}
       onLogout={logout}
+      onAccountUpdated={refreshProfile}
     />
   );
 }

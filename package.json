@@ -1,0 +1,12 @@
+{
+  "name": "junior-school-mgmt",
+  "private": true,
+  "description": "Convenience scripts — dependencies live in backend/ and frontend/",
+  "scripts": {
+    "db:sync": "npm run db:sync --prefix backend",
+    "dev:backend": "npm run dev --prefix backend",
+    "dev:frontend": "npm run dev --prefix frontend",
+    "build:backend": "npm run build --prefix backend",
+    "build:frontend": "npm run build --prefix frontend"
+  }
+}

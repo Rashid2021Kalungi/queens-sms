@@ -16,6 +16,19 @@ const schema = z.object({
   DB_PASSWORD: z.string().default(""),
   DB_NAME: z.string().default("queensdb"),
   CORS_ORIGIN: z.string().default("http://localhost:5173"),
+  /**
+   * Resend API (same idea as learningSystem user.controller.js). If set, password-reset email uses Resend
+   * instead of SMTP below.
+   */
+  RESEND_API_KEY: z.string().default(""),
+  /** e.g. "Queens Junior School <onboarding@resend.dev>" — use a domain you verify in Resend for production */
+  RESEND_FROM: z.string().default(""),
+  /** Optional — classic SMTP when RESEND_API_KEY is empty */
+  SMTP_HOST: z.string().default(""),
+  SMTP_PORT: z.coerce.number().default(587),
+  SMTP_USER: z.string().default(""),
+  SMTP_PASS: z.string().default(""),
+  SMTP_FROM: z.string().default(""),
 });
 
 export type Config = z.infer<typeof schema>;

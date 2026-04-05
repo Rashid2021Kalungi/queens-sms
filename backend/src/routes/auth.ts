@@ -3,11 +3,23 @@ import bcrypt from "bcrypt";
 import jwt, { type JwtPayload } from "jsonwebtoken";
 import { z } from "zod";
 import type { Config } from "../config.js";
-import { userByEmailCi } from "../models/index.js";
+import { loadUserMeFields } from "../db/loadUserSafe.js";
+import { User, userByEmailCi } from "../models/index.js";
+import {
+  issueSecurityOtpChallenge,
+  verifyAndConsumeSecurityOtpChallenge,
+} from "../services/securityOtpChallenge.js";
 
 const loginSchema = z.object({
   email: z.string().min(1),
   password: z.string().min(1),
+  /** When true, issue a longer-lived JWT (same as “Remember me” on the client). */
+  rememberMe: z.boolean().optional(),
+});
+
+const verify2faSchema = z.object({
+  twoFactorToken: z.string().min(10),
+  otp: z.string().min(4),
 });
 
 /** Valid bcrypt hash so unknown emails still pay compare cost */
@@ -21,26 +33,21 @@ export function createAuthRouter(config: Config) {
     const parsed = loginSchema.safeParse(req.body);
     if (!parsed.success) {
       return res.status(400).json({
-        error: "Invalid body",
-        details: parsed.error.flatten(),
+        error: "Enter your email and password.",
       });
     }
 
-    const { email, password } = parsed.data;
+    const { email, password, rememberMe } = parsed.data;
     const normalized = email.trim();
 
     let hashToCompare = DUMMY_HASH;
-    let userId: number | null = null;
-    let userEmail = normalized;
-    let role = "admin";
+    let user: InstanceType<typeof User> | null = null;
 
     try {
-      const user = await userByEmailCi(normalized);
-      if (user) {
-        hashToCompare = user.passwordHash;
-        userId = user.id;
-        userEmail = user.email;
-        role = user.role;
+      const found = await userByEmailCi(normalized);
+      if (found) {
+        hashToCompare = found.passwordHash;
+        user = found;
       }
     } catch (err) {
       console.error(err);
@@ -48,20 +55,105 @@ export function createAuthRouter(config: Config) {
     }
 
     const ok = await bcrypt.compare(password, hashToCompare);
-    if (!ok || userId === null) {
+    if (!ok || !user) {
       return res.status(401).json({ error: "Invalid credentials" });
     }
 
+    if (user.twoFactorEnabled) {
+      const issued = await issueSecurityOtpChallenge(config, {
+        userId: user.id,
+        email: user.email,
+        purpose: "login_2fa",
+      });
+      if (!issued.ok) {
+        return res.status(503).json({ error: issued.error });
+      }
+      const twoFactorToken = jwt.sign(
+        {
+          tfPending: true,
+          sub: String(user.id),
+          email: user.email,
+          role: user.role,
+          remember: Boolean(rememberMe),
+        },
+        config.JWT_SECRET,
+        { expiresIn: "10m" },
+      );
+      return res.json({ requiresTwoFactor: true, twoFactorToken });
+    }
+
+    const expiresIn = rememberMe ? "30d" : "7d";
     const token = jwt.sign(
-      { sub: String(userId), role, email: userEmail },
+      { sub: String(user.id), role: user.role, email: user.email },
       config.JWT_SECRET,
-      { expiresIn: "7d" },
+      { expiresIn },
     );
 
     return res.json({ token });
   });
 
-  r.get("/me", (req, res) => {
+  r.post("/verify-login-2fa", async (req, res) => {
+    const parsed = verify2faSchema.safeParse(req.body);
+    if (!parsed.success) {
+      return res.status(400).json({ error: "Enter the verification code." });
+    }
+    const { twoFactorToken, otp } = parsed.data;
+
+    let payload: JwtPayload & {
+      tfPending?: boolean;
+      sub?: string;
+      email?: string;
+      role?: string;
+      remember?: boolean;
+    };
+    try {
+      payload = jwt.verify(twoFactorToken, config.JWT_SECRET) as typeof payload;
+    } catch {
+      return res.status(400).json({
+        error: "Sign-in session expired. Please sign in again.",
+      });
+    }
+
+    if (!payload.tfPending || typeof payload.sub !== "string") {
+      return res.status(400).json({ error: "Invalid sign-in session." });
+    }
+
+    const userId = Number.parseInt(payload.sub, 10);
+    if (!Number.isFinite(userId)) {
+      return res.status(400).json({ error: "Invalid sign-in session." });
+    }
+
+    try {
+      const otpOk = await verifyAndConsumeSecurityOtpChallenge(
+        userId,
+        "login_2fa",
+        otp,
+      );
+      if (!otpOk) {
+        return res.status(400).json({
+          error: "Invalid or expired verification code.",
+        });
+      }
+
+      const row = await User.findByPk(userId);
+      if (!row || row.email !== payload.email) {
+        return res.status(400).json({ error: "Invalid sign-in session." });
+      }
+
+      const expiresIn = payload.remember ? "30d" : "7d";
+      const token = jwt.sign(
+        { sub: String(row.id), role: row.role, email: row.email },
+        config.JWT_SECRET,
+        { expiresIn },
+      );
+      return res.json({ token });
+    } catch (err) {
+      console.error(err);
+      return res.status(503).json({ error: "Database unavailable" });
+    }
+  });
+
+  r.get("/me", async (req, res) => {
     const header = req.headers.authorization;
     if (!header?.startsWith("Bearer ")) {
       return res.status(401).json({ error: "Unauthorized" });
@@ -73,13 +165,27 @@ export function createAuthRouter(config: Config) {
         role: string;
         email: string;
       };
-      return res.json({
-        user: {
-          sub: payload.sub,
-          role: payload.role,
+      const id = Number.parseInt(payload.sub, 10);
+      if (!Number.isFinite(id)) {
+        return res.status(401).json({ error: "Unauthorized" });
+      }
+      try {
+        const fields = await loadUserMeFields(id, {
           email: payload.email,
-        },
-      });
+          role: payload.role,
+        });
+        return res.json({
+          user: {
+            sub: payload.sub,
+            email: fields.email,
+            role: fields.role,
+            twoFactorEnabled: fields.twoFactorEnabled,
+          },
+        });
+      } catch (err) {
+        console.error(err);
+        return res.status(503).json({ error: "Database unavailable" });
+      }
     } catch {
       return res.status(401).json({ error: "Unauthorized" });
     }

@@ -1,9 +1,21 @@
-import { useEffect, useRef, useState, type ReactNode } from "react";
+import { useEffect, useMemo, useRef, useState, type ReactNode } from "react";
+import {
+  confirmPasswordChange,
+  confirmTwoFactor,
+  requestPasswordChangeOtp,
+  requestTwoFactorOtp,
+} from "../../api/account";
+import { useI18n } from "../../i18n/I18nProvider";
+import { localeLabels, type Locale } from "../../i18n/messages";
+import { useTheme } from "../../theme/ThemeProvider";
+import type { InboxItem } from "./headerInboxDemo";
+import { HeaderInboxDropdown } from "./HeaderInboxDropdown";
 
 export type AdminUser = {
   sub: string;
   role: string;
   email: string;
+  twoFactorEnabled?: boolean;
 };
 
 type AdminLayoutProps = {
@@ -11,6 +23,23 @@ type AdminLayoutProps = {
   profileLoading: boolean;
   children: ReactNode;
   onLogout: () => void;
+  /** Unread-only lists for the header bell and mail (from API). */
+  headerNotifications: InboxItem[];
+  headerMessages: InboxItem[];
+  onMarkAllNotificationsRead: () => void | Promise<void>;
+  onMarkAllMessagesRead: () => void | Promise<void>;
+  onOpenNotificationFromHeader: (id: string) => void;
+  onOpenMessageFromHeader: (id: string) => void;
+  onReadMoreNotifications: () => void;
+  onReadMoreMessages: () => void;
+  /** Communication sidebar: open full notifications or messages list. */
+  onOpenInboxList?: (kind: "notifications" | "messages") => void;
+  /** Clears settings sub-views (e.g. modes) when user opens Dashboard from the sidebar. */
+  onDashboardHome?: () => void;
+  /** Open a settings section from the sidebar (e.g. `modes`). */
+  onSelectSettingsPanel?: (panel: string) => void;
+  /** Refresh `/api/auth/me` after password or 2FA changes. */
+  onAccountUpdated?: () => void;
 };
 
 function MenuIcon({ className }: { className?: string }) {
@@ -299,110 +328,137 @@ function IconRestore({ className }: { className?: string }) {
   );
 }
 
+function IconSunMoon({ className }: { className?: string }) {
+  return (
+    <svg className={className} width="20" height="20" fill="none" viewBox="0 0 24 24" aria-hidden>
+      <path
+        stroke="currentColor"
+        strokeWidth="1.7"
+        strokeLinecap="round"
+        strokeLinejoin="round"
+        d="M12 3a6 6 0 109 9 9 9 0 01-9-9zM12 18a6 6 0 01-6-6 6 6 0 016-6"
+      />
+    </svg>
+  );
+}
+
 type NavIcon = typeof IconHome;
 
-type NavLeaf = { icon?: NavIcon; label: string; badge?: string };
+type NavLeaf = {
+  icon?: NavIcon;
+  label: string;
+  badge?: string;
+  settingsPanel?: string;
+  inboxList?: "notifications" | "messages";
+};
 
 type NavGroup = { id: string; title: string; icon: NavIcon; items: NavLeaf[] };
 
-const navGroups: NavGroup[] = [
-  {
-    id: "dashboard",
-    title: "Dashboard",
-    icon: IconHome,
-    items: [],
-  },
-  {
-    id: "student_hub",
-    title: "Students",
-    icon: IconUsers,
-    items: [
-      { icon: IconUsers, label: "All students" },
-      { icon: IconClipboard, label: "New admissions" },
-      { icon: IconGradCap, label: "Student profiles" },
-    ],
-  },
-  {
-    id: "classes",
-    title: "Classes & sections",
-    icon: IconGrid,
-    items: [
-      { icon: IconGrid, label: "Classes" },
-      { icon: IconLayers, label: "Sections" },
-    ],
-  },
-  {
-    id: "staff",
-    title: "Staff",
-    icon: IconUsers,
-    items: [
-      { icon: IconGradCap, label: "Teaching staff" },
-      { icon: IconBuilding, label: "Non-teaching staff" },
-    ],
-  },
-  {
-    id: "curriculum",
-    title: "Curriculum & learning",
-    icon: IconBook,
-    items: [
-      { icon: IconBook, label: "Academic syllabus" },
-      { icon: IconLayers, label: "Subjects" },
-      { icon: IconCalendar, label: "Class routine" },
-      { icon: IconClipboard, label: "Attendance" },
-      { icon: IconGradCap, label: "Exams" },
-      { icon: IconClipboard, label: "Results" },
-      { icon: IconPromotion, label: "Pupil promotion" },
-    ],
-  },
-  {
-    id: "operations",
-    title: "Operations & finance",
-    icon: IconWallet,
-    items: [
-      { icon: IconBook, label: "Library" },
-      { icon: IconStore, label: "Store" },
-      { icon: IconWallet, label: "Accounts" },
-      { icon: IconBus, label: "Transport" },
-      { icon: IconBuilding, label: "Hostel" },
-      { icon: IconBuilding, label: "Hostel manager" },
-      { icon: IconMegaphone, label: "All enquiries" },
-      { icon: IconSettings, label: "Enquiry category" },
-    ],
-  },
-  {
-    id: "communication",
-    title: "Communication",
-    icon: IconMail,
-    items: [
-      { icon: IconBell, label: "Notice board" },
-      { icon: IconMail, label: "Messages" },
-    ],
-  },
-  {
-    id: "statistics",
-    title: "Statistics",
-    icon: IconChartBars,
-    items: [],
-  },
-  {
-    id: "insights",
-    title: "Insights",
-    icon: IconInsights,
-    items: [],
-  },
-  {
-    id: "settings",
-    title: "Settings",
-    icon: IconSettings,
-    items: [
-      { icon: IconGrid, label: "General" },
-      { icon: IconBell, label: "Notifications" },
-      { icon: IconUsers, label: "Users & roles" },
-      { icon: IconBackup, label: "Backup" },
-      { icon: IconRestore, label: "Restore data" },
-    ],
-  },
-];
+function buildNavGroups(t: (key: string) => string): NavGroup[] {
+  return [
+    { id: "dashboard", title: t("nav.dashboard"), icon: IconHome, items: [] },
+    {
+      id: "student_hub",
+      title: t("nav.students"),
+      icon: IconUsers,
+      items: [
+        { icon: IconUsers, label: t("nav.students.all") },
+        { icon: IconClipboard, label: t("nav.students.admissions") },
+        { icon: IconGradCap, label: t("nav.students.profiles") },
+      ],
+    },
+    {
+      id: "classes",
+      title: t("nav.classes"),
+      icon: IconGrid,
+      items: [
+        { icon: IconGrid, label: t("nav.classes.list") },
+        { icon: IconLayers, label: t("nav.classes.sections") },
+      ],
+    },
+    {
+      id: "staff",
+      title: t("nav.staff"),
+      icon: IconUsers,
+      items: [
+        { icon: IconGradCap, label: t("nav.staff.teaching") },
+        { icon: IconBuilding, label: t("nav.staff.nonTeaching") },
+      ],
+    },
+    {
+      id: "curriculum",
+      title: t("nav.curriculum"),
+      icon: IconBook,
+      items: [
+        { icon: IconBook, label: t("nav.curriculum.syllabus") },
+        { icon: IconLayers, label: t("nav.curriculum.subjects") },
+        { icon: IconCalendar, label: t("nav.curriculum.routine") },
+        { icon: IconClipboard, label: t("nav.curriculum.attendance") },
+        { icon: IconGradCap, label: t("nav.curriculum.exams") },
+        { icon: IconClipboard, label: t("nav.curriculum.results") },
+        { icon: IconPromotion, label: t("nav.curriculum.promotion") },
+      ],
+    },
+    {
+      id: "operations",
+      title: t("nav.operations"),
+      icon: IconWallet,
+      items: [
+        { icon: IconBook, label: t("nav.operations.library") },
+        { icon: IconStore, label: t("nav.operations.store") },
+        { icon: IconWallet, label: t("nav.operations.accounts") },
+        { icon: IconBus, label: t("nav.operations.transport") },
+        { icon: IconBuilding, label: t("nav.operations.hostel") },
+        { icon: IconBuilding, label: t("nav.operations.hostelManager") },
+        { icon: IconMegaphone, label: t("nav.operations.enquiries") },
+        { icon: IconSettings, label: t("nav.operations.enquiryCategory") },
+      ],
+    },
+    {
+      id: "communication",
+      title: t("nav.communication"),
+      icon: IconMail,
+      items: [
+        { icon: IconBell, label: t("nav.communication.notice") },
+        {
+          icon: IconBell,
+          label: t("nav.communication.notificationsList"),
+          inboxList: "notifications",
+        },
+        {
+          icon: IconMail,
+          label: t("nav.communication.messages"),
+          inboxList: "messages",
+        },
+      ],
+    },
+    {
+      id: "statistics",
+      title: t("nav.statistics"),
+      icon: IconChartBars,
+      items: [],
+    },
+    {
+      id: "insights",
+      title: t("nav.insights"),
+      icon: IconInsights,
+      items: [],
+    },
+    {
+      id: "settings",
+      title: t("nav.settings"),
+      icon: IconSettings,
+      items: [
+        { icon: IconSunMoon, label: t("nav.settings.modes"), settingsPanel: "modes" },
+        { icon: IconGrid, label: t("nav.settings.general") },
+        { icon: IconBell, label: t("nav.settings.notifications") },
+        { icon: IconUsers, label: t("nav.settings.users") },
+        { icon: IconBackup, label: t("nav.settings.backup") },
+        { icon: IconRestore, label: t("nav.settings.restore") },
+      ],
+    },
+  ];
+}
 
 const defaultOpenGroups: Record<string, boolean> = {
   dashboard: false,
@@ -416,12 +472,6 @@ const defaultOpenGroups: Record<string, boolean> = {
   insights: false,
   settings: false,
 };
-
-function displayName(email: string | null) {
-  if (!email) return "Administrator";
-  const local = email.split("@")[0] ?? email;
-  return local.replace(/[._]/g, " ").replace(/\b\w/g, (c) => c.toUpperCase());
-}
 
 function ChevronDown({ open, className }: { open: boolean; className?: string }) {
   return (
@@ -443,15 +493,74 @@ export function AdminLayout({
   profileLoading,
   children,
   onLogout,
+  headerNotifications,
+  headerMessages,
+  onMarkAllNotificationsRead,
+  onMarkAllMessagesRead,
+  onOpenNotificationFromHeader,
+  onOpenMessageFromHeader,
+  onReadMoreNotifications,
+  onReadMoreMessages,
+  onOpenInboxList,
+  onDashboardHome,
+  onSelectSettingsPanel,
+  onAccountUpdated,
 }: AdminLayoutProps) {
+  const { t, locale, setLocale } = useI18n();
+  const { resolvedTheme, density } = useTheme();
+  const navGroups = useMemo(() => buildNavGroups(t), [t]);
+
   const [sidebarOpen, setSidebarOpen] = useState(false);
   const [openGroups, setOpenGroups] = useState<Record<string, boolean>>(() => ({ ...defaultOpenGroups }));
   const [userMenuOpen, setUserMenuOpen] = useState(false);
   const [userMenuProfile, setUserMenuProfile] = useState(false);
-  const userMenuRef = useRef<HTMLDivElement>(null);
+  const [langMenuOpen, setLangMenuOpen] = useState(false);
+  const [notifPanelOpen, setNotifPanelOpen] = useState(false);
+  const [msgPanelOpen, setMsgPanelOpen] = useState(false);
 
-  const name = displayName(user?.email ?? null);
-  const roleLabel = user?.role ? user.role.charAt(0).toUpperCase() + user.role.slice(1) : "Admin";
+  const [pwOtpSent, setPwOtpSent] = useState(false);
+  const [pwBusy, setPwBusy] = useState(false);
+  const [pwErr, setPwErr] = useState<string | null>(null);
+  const [pwOk, setPwOk] = useState<string | null>(null);
+  const [currentPw, setCurrentPw] = useState("");
+  const [newPw, setNewPw] = useState("");
+  const [newPw2, setNewPw2] = useState("");
+  const [pwOtp, setPwOtp] = useState("");
+
+  const [tfPending, setTfPending] = useState<{ enable: boolean } | null>(null);
+  const [tfOtp, setTfOtp] = useState("");
+  const [tfBusy, setTfBusy] = useState(false);
+  const [tfErr, setTfErr] = useState<string | null>(null);
+
+  const userMenuRef = useRef<HTMLDivElement>(null);
+  const langMenuRef = useRef<HTMLDivElement>(null);
+  const notifWrapRef = useRef<HTMLDivElement>(null);
+  const msgWrapRef = useRef<HTMLDivElement>(null);
+
+  const unreadNotifCount = headerNotifications.filter((n) => !n.read).length;
+  const unreadMsgCount = headerMessages.filter((m) => !m.read).length;
+
+  const name = useMemo(() => {
+    const email = user?.email ?? null;
+    if (!email) return t("role.administrator");
+    const local = email.split("@")[0] ?? email;
+    return local.replace(/[._]/g, " ").replace(/\b\w/g, (c) => c.toUpperCase());
+  }, [user?.email, t]);
+
+  const profileInitials = useMemo(() => {
+    const parts = name.split(/\s+/).filter(Boolean);
+    if (parts.length >= 2) {
+      return (parts[0].charAt(0) + parts[1].charAt(0)).toUpperCase();
+    }
+    const one = parts[0] ?? "?";
+    return one.length >= 2 ? one.slice(0, 2).toUpperCase() : one.charAt(0).toUpperCase();
+  }, [name]);
+
+  const roleLabel = user?.role
+    ? user.role.toLowerCase() === "admin"
+      ? t("role.admin")
+      : user.role.charAt(0).toUpperCase() + user.role.slice(1)
+    : t("role.admin");
 
   useEffect(() => {
     if (!userMenuOpen) return;
@@ -475,18 +584,81 @@ export function AdminLayout({
     };
   }, [userMenuOpen]);
 
+  useEffect(() => {
+    if (!langMenuOpen) return;
+    function handlePointerDown(e: PointerEvent) {
+      if (langMenuRef.current && !langMenuRef.current.contains(e.target as Node)) {
+        setLangMenuOpen(false);
+      }
+    }
+    function handleKey(e: KeyboardEvent) {
+      if (e.key === "Escape") setLangMenuOpen(false);
+    }
+    document.addEventListener("pointerdown", handlePointerDown);
+    document.addEventListener("keydown", handleKey);
+    return () => {
+      document.removeEventListener("pointerdown", handlePointerDown);
+      document.removeEventListener("keydown", handleKey);
+    };
+  }, [langMenuOpen]);
+
+  useEffect(() => {
+    if (!userMenuProfile) {
+      setPwOtpSent(false);
+      setPwBusy(false);
+      setPwErr(null);
+      setPwOk(null);
+      setCurrentPw("");
+      setNewPw("");
+      setNewPw2("");
+      setPwOtp("");
+      setTfPending(null);
+      setTfOtp("");
+      setTfBusy(false);
+      setTfErr(null);
+    }
+  }, [userMenuProfile]);
+
+  useEffect(() => {
+    if (!notifPanelOpen && !msgPanelOpen) return;
+    function handleMouseDown(e: MouseEvent) {
+      const target = e.target as Node;
+      if (notifWrapRef.current?.contains(target)) return;
+      if (msgWrapRef.current?.contains(target)) return;
+      setNotifPanelOpen(false);
+      setMsgPanelOpen(false);
+    }
+    function handleKey(e: KeyboardEvent) {
+      if (e.key === "Escape") {
+        setNotifPanelOpen(false);
+        setMsgPanelOpen(false);
+      }
+    }
+    document.addEventListener("mousedown", handleMouseDown);
+    document.addEventListener("keydown", handleKey);
+    return () => {
+      document.removeEventListener("mousedown", handleMouseDown);
+      document.removeEventListener("keydown", handleKey);
+    };
+  }, [notifPanelOpen, msgPanelOpen]);
+
   function closeUserMenu() {
     setUserMenuOpen(false);
     setUserMenuProfile(false);
   }
 
+  const themeClass = resolvedTheme === "dark" ? "theme-dark" : "";
+
   return (
-    <div className="neo-app-bg flex min-h-screen flex-col text-[#2d3436] lg:flex-row">
+    <div
+      className={`neo-app-bg flex min-h-screen flex-col text-[#2d3436] lg:flex-row ${themeClass}`}
+      data-density={density}
+    >
       {sidebarOpen ? (
         <button
           type="button"
           className="fixed inset-0 z-40 bg-[#2d3436]/25 backdrop-blur-[3px] lg:hidden"
-          aria-label="Close menu"
+          aria-label={t("layout.closeMenu")}
           onClick={() => setSidebarOpen(false)}
         />
       ) : null}
@@ -501,7 +673,7 @@ export function AdminLayout({
             type="button"
             className="neo-icon-btn rounded-lg p-1.5 text-[#636e72] lg:hidden"
             onClick={() => setSidebarOpen(false)}
-            aria-label="Close sidebar"
+            aria-label={t("layout.closeSidebar")}
           >
             <MenuIcon />
           </button>
@@ -512,13 +684,13 @@ export function AdminLayout({
             <div className="min-w-0">
               <p className="truncate text-xs font-bold tracking-tight text-[#2d3436]">Queens</p>
               <p className="truncate text-[9px] font-semibold uppercase tracking-[0.14em] text-[#636e72]">
-                Junior School
+                {t("brand.subtitle")}
               </p>
             </div>
           </div>
         </div>
 
-        <nav className="flex-1 overflow-y-auto overflow-x-hidden px-1.5 py-2" aria-label="Main navigation">
+        <nav className="flex-1 overflow-y-auto overflow-x-hidden px-1.5 py-2" aria-label={t("layout.mainNav")}>
           <div className="space-y-1">
             {navGroups.map((group) => {
               const open = openGroups[group.id] ?? false;
@@ -530,6 +702,10 @@ export function AdminLayout({
                   <div key={group.id} className="rounded-xl">
                     <button
                       type="button"
+                      onClick={() => {
+                        if (group.id === "dashboard") onDashboardHome?.();
+                        setSidebarOpen(false);
+                      }}
                       className="group flex w-full items-center gap-1.5 rounded-lg px-1.5 py-1 text-left neo-nav-group-idle rounded-xl"
                     >
                       <span className="flex h-6 w-6 shrink-0 items-center justify-center rounded-md bg-white/25 text-[#636e72] transition group-hover:bg-white/45 group-hover:text-[#2d3436]">
@@ -588,6 +764,15 @@ export function AdminLayout({
                           <li key={item.label}>
                             <button
                               type="button"
+                              onClick={() => {
+                                if (item.inboxList) {
+                                  onOpenInboxList?.(item.inboxList);
+                                }
+                                if (item.settingsPanel) {
+                                  onSelectSettingsPanel?.(item.settingsPanel);
+                                }
+                                setSidebarOpen(false);
+                              }}
                               className="neo-nav-item flex w-full items-center gap-1.5 rounded-md px-1.5 py-1 text-left text-[11px] font-medium leading-snug text-[#636e72]"
                             >
                               {ItemIcon ? (
@@ -621,64 +806,176 @@ export function AdminLayout({
               type="button"
               className="neo-icon-btn rounded-lg p-1.5 text-[#636e72] lg:hidden"
               onClick={() => setSidebarOpen(true)}
-              aria-label="Open menu"
+              aria-label={t("layout.openMenu")}
             >
               <MenuIcon />
             </button>
             <div className="hidden min-w-0 max-w-md flex-1 md:block lg:max-w-xl">
               <label className="relative block">
-                <span className="sr-only">Search</span>
+                <span className="sr-only">{t("layout.search")}</span>
                 <IconSearch className="pointer-events-none absolute left-3 top-1/2 z-10 h-4 w-4 -translate-y-1/2 text-[#636e72]" />
                 <input
                   type="search"
-                  placeholder="Search students, classes, reports…"
+                  placeholder={t("layout.searchPlaceholder")}
                   className="neo-inset w-full py-2 pl-9 pr-3 text-xs text-[#2d3436] outline-none transition placeholder:text-[#636e72]/80 focus:ring-2 focus:ring-[#b9d9eb]/60"
                 />
               </label>
             </div>
             <div className="hidden min-w-0 flex-1 flex-col items-center justify-center px-1 lg:flex">
               <p className="truncate text-center text-[10px] font-bold uppercase tracking-[0.12em] text-[#b8682a] sm:text-[11px]">
-                School management system
+                {t("layout.systemTitle")}
               </p>
             </div>
             <div className="ml-auto flex flex-wrap items-center gap-1 sm:gap-1.5">
               <div
                 className="hidden items-center gap-1 border-r border-[#ebe4d9]/80 pr-2 text-[10px] md:flex md:text-[11px]"
-                title="Active academic session"
+                title={t("layout.runningSession")}
               >
-                <span className="shrink-0 font-semibold text-[#b85c5c]">Running session:</span>
+                <span className="shrink-0 font-semibold text-[#b85c5c]">{t("layout.runningSession")}</span>
                 <IconUser className="h-3.5 w-3.5 shrink-0 text-[#636e72]" />
                 <span className="max-w-[6.5rem] truncate font-medium text-[#2d3436]">
                   {profileLoading ? "…" : name}
                 </span>
               </div>
-              <button
-                type="button"
-                className="hidden items-center gap-1.5 rounded-full bg-gradient-to-br from-[#cde8cf] to-[#9dc6a0] px-2.5 py-1 text-[10px] font-semibold text-[#2d3436] shadow-[2px_2px_6px_rgba(120,150,125,0.35),-2px_-2px_5px_rgba(255,255,255,0.85)] transition hover:brightness-105 sm:flex sm:text-[11px]"
-              >
-                <IconGlobe className="shrink-0" />
-                Change language
-              </button>
-              <button
-                type="button"
-                className="neo-icon-btn relative p-2 text-[#636e72]"
-                aria-label="Notifications"
-              >
-                <IconBell />
-                <span className="absolute right-0 top-0 flex h-3.5 min-w-[0.875rem] items-center justify-center rounded-full bg-gradient-to-br from-[#f7d1cd] to-[#e8a8a2] px-0.5 text-[9px] font-bold text-[#2d3436] shadow-sm">
-                  5
-                </span>
-              </button>
-              <button
-                type="button"
-                className="neo-icon-btn relative p-2 text-[#636e72]"
-                aria-label="Messages"
-              >
-                <IconMail />
-                <span className="absolute right-0 top-0 flex h-3.5 min-w-[0.875rem] items-center justify-center rounded-full bg-gradient-to-br from-[#b9d9eb] to-[#8bb8d4] px-0.5 text-[9px] font-bold text-[#2d3436] shadow-sm">
-                  8
-                </span>
-              </button>
+              <div className="relative" ref={langMenuRef}>
+                <button
+                  type="button"
+                  onClick={() => {
+                    setNotifPanelOpen(false);
+                    setMsgPanelOpen(false);
+                    setUserMenuOpen(false);
+                    setUserMenuProfile(false);
+                    setLangMenuOpen((o) => !o);
+                  }}
+                  aria-expanded={langMenuOpen}
+                  aria-haspopup="listbox"
+                  aria-label={t("layout.changeLanguage")}
+                  className="flex items-center gap-1.5 rounded-full bg-gradient-to-br from-[#cde8cf] to-[#9dc6a0] px-2.5 py-1 text-[10px] font-semibold text-[#2d3436] shadow-[2px_2px_6px_rgba(120,150,125,0.35),-2px_-2px_5px_rgba(255,255,255,0.85)] transition hover:brightness-105 sm:text-[11px]"
+                >
+                  <IconGlobe className="shrink-0" />
+                  {localeLabels[locale]}
+                </button>
+                {langMenuOpen ? (
+                  <ul
+                    role="listbox"
+                    aria-label={t("layout.changeLanguage")}
+                    className="neo-dropdown absolute right-0 top-full z-[60] mt-2 min-w-[10rem] overflow-hidden py-1"
+                  >
+                    {(["en", "sw"] as Locale[]).map((loc) => (
+                      <li key={loc} role="presentation">
+                        <button
+                          type="button"
+                          role="option"
+                          aria-selected={loc === locale}
+                          className={`flex w-full px-3 py-2 text-left text-sm font-medium transition hover:bg-[#b9d9eb]/35 ${
+                            loc === locale ? "bg-[#cde8cf]/50 text-[#2d3436]" : "text-[#2d3436]"
+                          }`}
+                          onClick={() => {
+                            setLocale(loc);
+                            setLangMenuOpen(false);
+                          }}
+                        >
+                          {localeLabels[loc]}
+                        </button>
+                      </li>
+                    ))}
+                  </ul>
+                ) : null}
+              </div>
+              <div className="relative" ref={notifWrapRef}>
+                <button
+                  type="button"
+                  onClick={() => {
+                    setLangMenuOpen(false);
+                    closeUserMenu();
+                    setMsgPanelOpen(false);
+                    setNotifPanelOpen((o) => !o);
+                  }}
+                  aria-expanded={notifPanelOpen}
+                  aria-haspopup="dialog"
+                  aria-label={`${t("layout.notifications")}${unreadNotifCount > 0 ? `, ${unreadNotifCount} unread` : ""}`}
+                  className={`neo-icon-btn relative p-2 text-[#636e72] ${notifPanelOpen ? "bg-[#b9d9eb]/40" : ""}`}
+                >
+                  <IconBell />
+                  {unreadNotifCount > 0 ? (
+                    <span className="absolute right-0 top-0 flex h-3.5 min-w-[0.875rem] items-center justify-center rounded-full bg-gradient-to-br from-[#f7d1cd] to-[#e8a8a2] px-0.5 text-[9px] font-bold text-[#2d3436] shadow-sm">
+                      {unreadNotifCount > 9 ? "9+" : unreadNotifCount}
+                    </span>
+                  ) : null}
+                </button>
+                <HeaderInboxDropdown
+                  open={notifPanelOpen}
+                  title={t("header.notif.title")}
+                  emptyLabel={t("header.notif.empty")}
+                  markAllLabel={t("header.notif.markAll")}
+                  readMoreLabel={t("header.readMore")}
+                  timeSuffix={t("header.timeSuffix")}
+                  items={headerNotifications}
+                  variant="notification"
+                  onMarkAllRead={async () => {
+                    try {
+                      await onMarkAllNotificationsRead();
+                    } finally {
+                      setNotifPanelOpen(false);
+                    }
+                  }}
+                  onItemClick={(id) => {
+                    setNotifPanelOpen(false);
+                    onOpenNotificationFromHeader(id);
+                  }}
+                  onReadMore={() => {
+                    setNotifPanelOpen(false);
+                    onReadMoreNotifications();
+                  }}
+                />
+              </div>
+              <div className="relative" ref={msgWrapRef}>
+                <button
+                  type="button"
+                  onClick={() => {
+                    setLangMenuOpen(false);
+                    closeUserMenu();
+                    setNotifPanelOpen(false);
+                    setMsgPanelOpen((o) => !o);
+                  }}
+                  aria-expanded={msgPanelOpen}
+                  aria-haspopup="dialog"
+                  aria-label={`${t("layout.messages")}${unreadMsgCount > 0 ? `, ${unreadMsgCount} unread` : ""}`}
+                  className={`neo-icon-btn relative p-2 text-[#636e72] ${msgPanelOpen ? "bg-[#b9d9eb]/40" : ""}`}
+                >
+                  <IconMail />
+                  {unreadMsgCount > 0 ? (
+                    <span className="absolute right-0 top-0 flex h-3.5 min-w-[0.875rem] items-center justify-center rounded-full bg-gradient-to-br from-[#b9d9eb] to-[#8bb8d4] px-0.5 text-[9px] font-bold text-[#2d3436] shadow-sm">
+                      {unreadMsgCount > 9 ? "9+" : unreadMsgCount}
+                    </span>
+                  ) : null}
+                </button>
+                <HeaderInboxDropdown
+                  open={msgPanelOpen}
+                  title={t("header.msg.title")}
+                  emptyLabel={t("header.msg.empty")}
+                  markAllLabel={t("header.msg.markAll")}
+                  readMoreLabel={t("header.readMore")}
+                  timeSuffix={t("header.timeSuffix")}
+                  items={headerMessages}
+                  variant="message"
+                  onMarkAllRead={async () => {
+                    try {
+                      await onMarkAllMessagesRead();
+                    } finally {
+                      setMsgPanelOpen(false);
+                    }
+                  }}
+                  onItemClick={(id) => {
+                    setMsgPanelOpen(false);
+                    onOpenMessageFromHeader(id);
+                  }}
+                  onReadMore={() => {
+                    setMsgPanelOpen(false);
+                    onReadMoreMessages();
+                  }}
+                />
+              </div>
               <div className="relative ml-0.5" ref={userMenuRef}>
                 <button
                   type="button"
@@ -686,13 +983,20 @@ export function AdminLayout({
                     if (userMenuOpen) {
                       closeUserMenu();
                     } else {
+                      setNotifPanelOpen(false);
+                      setMsgPanelOpen(false);
+                      setLangMenuOpen(false);
                       setUserMenuProfile(false);
                       setUserMenuOpen(true);
                     }
                   }}
                   aria-expanded={userMenuOpen}
                   aria-haspopup="menu"
-                  aria-label={profileLoading ? "Account menu, loading" : `Account menu, signed in as ${name}`}
+                  aria-label={
+                    profileLoading
+                      ? `${t("layout.accountMenu")}, ${t("layout.loading")}`
+                      : `${t("layout.accountMenu")}, ${t("layout.signedInAs")} ${name}`
+                  }
                   className={`neo-icon-btn p-2 text-[#2d3436] ${
                     userMenuOpen
                       ? "bg-gradient-to-br from-[#cde8cf] to-[#b8d8ba] shadow-[inset_1px_1px_3px_rgba(0,0,0,0.06)]"
@@ -712,7 +1016,11 @@ export function AdminLayout({
                   <div
                     role="menu"
                     aria-orientation="vertical"
-                    className="neo-dropdown absolute right-0 top-full z-[60] mt-3 w-[min(100vw-2rem,18rem)] overflow-hidden py-2"
+                    className={`neo-dropdown absolute right-0 top-full z-[60] mt-3 overflow-hidden shadow-lg ${
+                      userMenuProfile
+                        ? "w-[min(100vw-2rem,22rem)] py-0"
+                        : "w-[min(100vw-2rem,18rem)] py-2"
+                    }`}
                   >
                     {!userMenuProfile ? (
                       <>
@@ -726,10 +1034,13 @@ export function AdminLayout({
                         <button
                           type="button"
                           role="menuitem"
-                          className="flex w-full px-4 py-2.5 text-left text-sm font-medium text-[#2d3436] transition hover:bg-[#b9d9eb]/35"
+                          className="flex w-full items-center gap-3 px-4 py-2.5 text-left text-sm font-medium text-[#2d3436] transition hover:bg-[#b9d9eb]/35"
                           onClick={() => setUserMenuProfile(true)}
                         >
-                          Manage profile
+                          <span className="flex h-9 w-9 shrink-0 items-center justify-center rounded-xl bg-[#f0f4f2] text-[#4a6b4e] shadow-[inset_1px_1px_2px_rgba(0,0,0,0.04)]">
+                            <IconSettings className="h-[15px] w-[15px]" />
+                          </span>
+                          <span className="min-w-0 flex-1 leading-snug">{t("layout.manageProfile")}</span>
                         </button>
                         <button
                           type="button"
@@ -740,32 +1051,386 @@ export function AdminLayout({
                             onLogout();
                           }}
                         >
-                          Log out
+                          {t("layout.logOut")}
                         </button>
                       </>
                     ) : (
-                      <div className="px-4 py-2">
+                      <div className="flex flex-col">
                         <button
                           type="button"
-                          className="mb-3 flex items-center gap-1 text-xs font-semibold text-[#5a8faf] hover:text-[#2d3436]"
+                          className="flex w-full items-center gap-2 border-b border-[#ebe4d9]/80 bg-[#faf9f6]/90 px-3 py-2.5 text-left text-xs font-semibold text-[#5a8faf] transition hover:bg-[#b9d9eb]/20 hover:text-[#2d3436]"
                           onClick={() => setUserMenuProfile(false)}
                         >
-                          <span aria-hidden>←</span> Back
+                          <svg className="h-3.5 w-3.5 shrink-0" fill="none" viewBox="0 0 24 24" aria-hidden>
+                            <path
+                              stroke="currentColor"
+                              strokeWidth="2"
+                              strokeLinecap="round"
+                              strokeLinejoin="round"
+                              d="M15 18l-6-6 6-6"
+                            />
+                          </svg>
+                          {t("layout.profile.backToMenu")}
                         </button>
-                        <p className="text-xs font-semibold uppercase tracking-wide text-[#636e72]">
-                          Your account
-                        </p>
-                        <label className="mt-3 block text-xs font-medium text-[#636e72]">Email</label>
-                        <p className="neo-inset-field mt-1 px-3 py-2 text-sm text-[#2d3436]">
-                          {user?.email ?? "—"}
-                        </p>
-                        <label className="mt-3 block text-xs font-medium text-[#636e72]">Display name</label>
-                        <p className="neo-inset-field mt-1 px-3 py-2 text-sm text-[#2d3436]">
-                          {name}
-                        </p>
-                        <p className="mt-3 text-xs leading-relaxed text-[#636e72]">
-                          Password and profile updates can be wired to your API when ready.
-                        </p>
+
+                        <div className="border-b border-[#ebe4d9]/80 bg-gradient-to-br from-[#eef6f2] via-[#e8f2fa] to-[#f5f0e6] px-4 py-4">
+                          <div className="flex items-start gap-3">
+                            <div
+                              className="flex h-12 w-12 shrink-0 items-center justify-center rounded-2xl bg-gradient-to-br from-[#3d5a40] to-[#4a6b4e] text-[13px] font-bold tracking-tight text-white shadow-[2px_3px_8px_rgba(60,90,65,0.35)]"
+                              aria-hidden
+                            >
+                              {profileInitials}
+                            </div>
+                            <div className="min-w-0 flex-1 pt-0.5">
+                              <h2 className="text-sm font-bold leading-tight text-[#2d3436]">
+                                {t("layout.profile.title")}
+                              </h2>
+                              <p className="mt-1 text-[11px] leading-snug text-[#636e72]">
+                                {t("layout.profile.subtitle")}
+                              </p>
+                            </div>
+                          </div>
+                        </div>
+
+                        <div className="max-h-[min(70vh,26rem)] space-y-4 overflow-y-auto px-4 py-4">
+                          <section aria-labelledby="profile-details-heading">
+                            <h3
+                              id="profile-details-heading"
+                              className="text-[10px] font-bold uppercase tracking-[0.14em] text-[#636e72]"
+                            >
+                              {t("layout.profile.sectionDetails")}
+                            </h3>
+                            <dl className="mt-2 divide-y divide-[#ebe4d9]/90 rounded-xl border border-[#ebe4d9]/80 bg-white/50 p-1 shadow-[inset_0_1px_0_rgba(255,255,255,0.6)]">
+                              <div className="px-3 py-2.5">
+                                <dt className="flex flex-wrap items-center gap-2">
+                                  <span className="text-[10px] font-bold uppercase tracking-wide text-[#636e72]">
+                                    {t("layout.profile.primaryEmail")}
+                                  </span>
+                                  <span className="rounded-md bg-[#cde8cf]/90 px-1.5 py-0.5 text-[9px] font-bold uppercase tracking-wide text-[#2d3436]">
+                                    {t("layout.profile.badgePrimary")}
+                                  </span>
+                                </dt>
+                                <dd className="mt-1.5 break-all text-sm font-semibold text-[#2d3436]">
+                                  {user?.email ?? "—"}
+                                </dd>
+                              </div>
+                              <div className="px-3 py-2.5">
+                                <dt className="text-[10px] font-bold uppercase tracking-wide text-[#636e72]">
+                                  {t("layout.profile.displayName")}
+                                </dt>
+                                <dd className="mt-1.5 text-sm font-semibold text-[#2d3436]">{name}</dd>
+                              </div>
+                              <div className="px-3 py-2.5">
+                                <dt className="text-[10px] font-bold uppercase tracking-wide text-[#636e72]">
+                                  {t("layout.profile.role")}
+                                </dt>
+                                <dd className="mt-1.5">
+                                  <span className="inline-flex rounded-full bg-[#e8f2ec] px-2.5 py-0.5 text-xs font-semibold text-[#2d3436] ring-1 ring-[#b8d8ba]/50">
+                                    {roleLabel}
+                                  </span>
+                                </dd>
+                              </div>
+                              <div className="px-3 py-2.5">
+                                <dt className="text-[10px] font-bold uppercase tracking-wide text-[#636e72]">
+                                  {t("layout.profile.accountId")}
+                                </dt>
+                                <dd className="mt-1.5 font-mono text-xs font-medium text-[#636e72]">
+                                  {user?.sub ?? "—"}
+                                </dd>
+                              </div>
+                            </dl>
+                          </section>
+
+                          <section aria-labelledby="profile-password-heading">
+                            <h3
+                              id="profile-password-heading"
+                              className="text-[10px] font-bold uppercase tracking-[0.14em] text-[#636e72]"
+                            >
+                              {t("layout.profile.changePasswordTitle")}
+                            </h3>
+                            <div className="mt-2 space-y-2 rounded-xl border border-[#ebe4d9]/80 bg-white/50 p-3">
+                              {pwOk ? (
+                                <p className="text-xs font-semibold text-[#4a6b4e]" role="status">
+                                  {pwOk}
+                                </p>
+                              ) : null}
+                              {pwErr ? (
+                                <p className="text-xs font-medium text-[#c0392b]" role="alert">
+                                  {pwErr}
+                                </p>
+                              ) : null}
+                              {!pwOtpSent ? (
+                                <button
+                                  type="button"
+                                  disabled={pwBusy}
+                                  onClick={async () => {
+                                    setPwErr(null);
+                                    setPwOk(null);
+                                    setPwBusy(true);
+                                    try {
+                                      await requestPasswordChangeOtp();
+                                      setPwOtpSent(true);
+                                    } catch (e) {
+                                      setPwErr(
+                                        e instanceof Error ? e.message : t("inbox.loadError"),
+                                      );
+                                    } finally {
+                                      setPwBusy(false);
+                                    }
+                                  }}
+                                  className="w-full rounded-xl bg-gradient-to-br from-[#b9d9eb]/50 to-[#cde8cf]/40 py-2 text-xs font-bold text-[#2d3436] transition hover:brightness-105 disabled:opacity-60"
+                                >
+                                  {pwBusy ? t("layout.profile.sending") : t("layout.profile.changePasswordSendCode")}
+                                </button>
+                              ) : (
+                                <div className="space-y-2">
+                                  <p className="text-[11px] leading-snug text-[#636e72]">
+                                    {t("layout.profile.changePasswordCodeSent")}
+                                  </p>
+                                  <input
+                                    type="password"
+                                    autoComplete="current-password"
+                                    placeholder={t("layout.profile.currentPassword")}
+                                    value={currentPw}
+                                    onChange={(e) => setCurrentPw(e.target.value)}
+                                    disabled={pwBusy}
+                                    className="neo-inset-field w-full px-3 py-2 text-xs text-[#2d3436] placeholder:text-[#636e72]/70"
+                                  />
+                                  <input
+                                    type="password"
+                                    autoComplete="new-password"
+                                    placeholder={t("layout.profile.newPassword")}
+                                    value={newPw}
+                                    onChange={(e) => setNewPw(e.target.value)}
+                                    disabled={pwBusy}
+                                    className="neo-inset-field w-full px-3 py-2 text-xs text-[#2d3436] placeholder:text-[#636e72]/70"
+                                  />
+                                  <input
+                                    type="password"
+                                    autoComplete="new-password"
+                                    placeholder={t("layout.profile.confirmNewPassword")}
+                                    value={newPw2}
+                                    onChange={(e) => setNewPw2(e.target.value)}
+                                    disabled={pwBusy}
+                                    className="neo-inset-field w-full px-3 py-2 text-xs text-[#2d3436] placeholder:text-[#636e72]/70"
+                                  />
+                                  <input
+                                    type="text"
+                                    inputMode="numeric"
+                                    autoComplete="one-time-code"
+                                    placeholder={t("layout.profile.otpCode")}
+                                    value={pwOtp}
+                                    onChange={(e) =>
+                                      setPwOtp(e.target.value.replace(/\D/g, "").slice(0, 6))
+                                    }
+                                    disabled={pwBusy}
+                                    className="neo-inset-field w-full px-3 py-2 text-center text-sm font-semibold tracking-widest text-[#2d3436] placeholder:tracking-normal placeholder:text-[#636e72]/70"
+                                  />
+                                  <button
+                                    type="button"
+                                    disabled={
+                                      pwBusy ||
+                                      !currentPw ||
+                                      newPw.length < 8 ||
+                                      pwOtp.length !== 6
+                                    }
+                                    onClick={async () => {
+                                      setPwErr(null);
+                                      setPwOk(null);
+                                      if (newPw !== newPw2) {
+                                        setPwErr(t("layout.profile.passwordsMismatch"));
+                                        return;
+                                      }
+                                      setPwBusy(true);
+                                      try {
+                                        await confirmPasswordChange({
+                                          currentPassword: currentPw,
+                                          newPassword: newPw,
+                                          otp: pwOtp,
+                                        });
+                                        setPwOk(t("layout.profile.passwordUpdated"));
+                                        setCurrentPw("");
+                                        setNewPw("");
+                                        setNewPw2("");
+                                        setPwOtp("");
+                                        setPwOtpSent(false);
+                                        onAccountUpdated?.();
+                                      } catch (e) {
+                                        setPwErr(
+                                          e instanceof Error ? e.message : t("inbox.loadError"),
+                                        );
+                                      } finally {
+                                        setPwBusy(false);
+                                      }
+                                    }}
+                                    className="w-full rounded-xl bg-gradient-to-br from-[#cde8cf] to-[#8fb892] py-2 text-xs font-bold text-[#2d3436] shadow-sm transition hover:brightness-105 disabled:opacity-50"
+                                  >
+                                    {pwBusy ? t("layout.profile.working") : t("layout.profile.updatePassword")}
+                                  </button>
+                                </div>
+                              )}
+                            </div>
+                          </section>
+
+                          <section aria-labelledby="profile-2fa-heading">
+                            <h3
+                              id="profile-2fa-heading"
+                              className="text-[10px] font-bold uppercase tracking-[0.14em] text-[#636e72]"
+                            >
+                              {t("layout.profile.twoFactorTitle")}
+                            </h3>
+                            <div className="mt-2 space-y-2 rounded-xl border border-[#ebe4d9]/80 bg-white/50 p-3">
+                              <p className="text-[11px] leading-snug text-[#636e72]">
+                                {t("layout.profile.twoFactorDescription")}
+                              </p>
+                              <p className="text-xs font-semibold text-[#2d3436]">
+                                {user?.twoFactorEnabled
+                                  ? t("layout.profile.twoFactorStatusOn")
+                                  : t("layout.profile.twoFactorStatusOff")}
+                              </p>
+                              {tfErr ? (
+                                <p className="text-xs font-medium text-[#c0392b]" role="alert">
+                                  {tfErr}
+                                </p>
+                              ) : null}
+                              {!tfPending ? (
+                                <div className="flex flex-wrap gap-2">
+                                  {!user?.twoFactorEnabled ? (
+                                    <button
+                                      type="button"
+                                      disabled={tfBusy}
+                                      onClick={async () => {
+                                        setTfErr(null);
+                                        setTfBusy(true);
+                                        try {
+                                          await requestTwoFactorOtp(true);
+                                          setTfPending({ enable: true });
+                                        } catch (e) {
+                                          setTfErr(
+                                            e instanceof Error ? e.message : t("inbox.loadError"),
+                                          );
+                                        } finally {
+                                          setTfBusy(false);
+                                        }
+                                      }}
+                                      className="rounded-xl bg-gradient-to-br from-[#cde8cf] to-[#8fb892] px-4 py-2 text-xs font-bold text-[#2d3436] shadow-sm transition hover:brightness-105 disabled:opacity-50"
+                                    >
+                                      {tfBusy ? t("layout.profile.sending") : t("layout.profile.turnOn2fa")}
+                                    </button>
+                                  ) : (
+                                    <button
+                                      type="button"
+                                      disabled={tfBusy}
+                                      onClick={async () => {
+                                        setTfErr(null);
+                                        setTfBusy(true);
+                                        try {
+                                          await requestTwoFactorOtp(false);
+                                          setTfPending({ enable: false });
+                                        } catch (e) {
+                                          setTfErr(
+                                            e instanceof Error ? e.message : t("inbox.loadError"),
+                                          );
+                                        } finally {
+                                          setTfBusy(false);
+                                        }
+                                      }}
+                                      className="rounded-xl border border-[#ebe4d9] bg-[#faf7f0] px-4 py-2 text-xs font-bold text-[#c0392b] transition hover:bg-[#f7d1cd]/30 disabled:opacity-50"
+                                    >
+                                      {tfBusy ? t("layout.profile.sending") : t("layout.profile.turnOff2fa")}
+                                    </button>
+                                  )}
+                                </div>
+                              ) : (
+                                <div className="space-y-2 border-t border-[#ebe4d9]/60 pt-2">
+                                  <p className="text-[11px] text-[#636e72]">
+                                    {t("layout.profile.2faAwaitingCode")}
+                                  </p>
+                                  <input
+                                    type="text"
+                                    inputMode="numeric"
+                                    autoComplete="one-time-code"
+                                    placeholder={t("layout.profile.otpCode")}
+                                    value={tfOtp}
+                                    onChange={(e) =>
+                                      setTfOtp(e.target.value.replace(/\D/g, "").slice(0, 6))
+                                    }
+                                    disabled={tfBusy}
+                                    className="neo-inset-field w-full px-3 py-2 text-center text-sm font-semibold tracking-widest text-[#2d3436] placeholder:tracking-normal"
+                                  />
+                                  <div className="flex flex-wrap gap-2">
+                                    <button
+                                      type="button"
+                                      disabled={tfBusy || tfOtp.length !== 6}
+                                      onClick={async () => {
+                                        setTfErr(null);
+                                        setTfBusy(true);
+                                        try {
+                                          await confirmTwoFactor(tfPending.enable, tfOtp);
+                                          setTfPending(null);
+                                          setTfOtp("");
+                                          onAccountUpdated?.();
+                                        } catch (e) {
+                                          setTfErr(
+                                            e instanceof Error ? e.message : t("inbox.loadError"),
+                                          );
+                                        } finally {
+                                          setTfBusy(false);
+                                        }
+                                      }}
+                                      className="rounded-xl bg-gradient-to-br from-[#cde8cf] to-[#8fb892] px-4 py-2 text-xs font-bold text-[#2d3436] disabled:opacity-50"
+                                    >
+                                      {tfBusy ? t("layout.profile.working") : t("layout.profile.confirm2fa")}
+                                    </button>
+                                    <button
+                                      type="button"
+                                      disabled={tfBusy}
+                                      onClick={() => {
+                                        setTfPending(null);
+                                        setTfOtp("");
+                                        setTfErr(null);
+                                      }}
+                                      className="rounded-xl px-4 py-2 text-xs font-semibold text-[#5a8faf] hover:underline"
+                                    >
+                                      {t("layout.profile.cancelAction")}
+                                    </button>
+                                  </div>
+                                </div>
+                              )}
+                            </div>
+                          </section>
+
+                          <section aria-labelledby="profile-security-heading">
+                            <h3
+                              id="profile-security-heading"
+                              className="text-[10px] font-bold uppercase tracking-[0.14em] text-[#636e72]"
+                            >
+                              {t("layout.profile.sectionSecurity")}
+                            </h3>
+                            <div className="mt-2 rounded-xl border border-[#ebe4d9]/80 bg-gradient-to-br from-[#faf9f6] to-[#f0f4f8] p-3">
+                              <div className="flex gap-2">
+                                <span className="mt-0.5 flex h-7 w-7 shrink-0 items-center justify-center rounded-lg bg-white/80 text-[#5a8faf] shadow-sm ring-1 ring-[#ebe4d9]/60">
+                                  <svg className="h-3.5 w-3.5" fill="none" viewBox="0 0 24 24" aria-hidden>
+                                    <path
+                                      stroke="currentColor"
+                                      strokeWidth="1.7"
+                                      strokeLinecap="round"
+                                      strokeLinejoin="round"
+                                      d="M12 15v2m-6 4h12a2 2 0 002-2v-6a2 2 0 00-2-2H10l-4-4V5a2 2 0 012-2h4a2 2 0 012 2v4"
+                                    />
+                                  </svg>
+                                </span>
+                                <p className="text-[11px] leading-relaxed text-[#636e72]">
+                                  {t("layout.profile.securityIntro")}
+                                </p>
+                              </div>
+                            </div>
+                          </section>
+
+                          <p className="border-t border-[#ebe4d9]/60 pt-3 text-[10px] leading-relaxed text-[#636e72]/90">
+                            {t("layout.profile.footerNote")}
+                          </p>
+                        </div>
                       </div>
                     )}
                   </div>
@@ -778,7 +1443,7 @@ export function AdminLayout({
         <div className="min-h-0 flex-1">{children}</div>
 
         <footer className="neo-footer shrink-0 border-t border-white/40 py-3.5 text-center text-xs font-medium text-[#636e72]">
-          © {new Date().getFullYear()} Queens Junior School · School management system
+          © {new Date().getFullYear()} {t("layout.copyright")} · {t("layout.footer")}
         </footer>
       </div>
     </div>

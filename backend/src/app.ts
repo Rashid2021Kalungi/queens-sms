@@ -1,10 +1,14 @@
-import express from "express";
+import express, { Router } from "express";
 import cors from "cors";
 import helmet from "helmet";
 import rateLimit from "express-rate-limit";
 import type { Config } from "./config.js";
+import { requireAuth } from "./middleware/requireAuth.js";
 import { healthRouter } from "./routes/health.js";
 import { createAuthRouter } from "./routes/auth.js";
+import { createPasswordResetRouter } from "./routes/passwordReset.js";
+import { createMeAccountRouter } from "./routes/meAccount.js";
+import { createMeInboxRouter } from "./routes/meInbox.js";
 
 export function buildApp(config: Config) {
   const app = express();
@@ -37,6 +41,12 @@ export function buildApp(config: Config) {
 
   app.use("/api", healthRouter);
   app.use("/api/auth", createAuthRouter(config));
+  app.use("/api/auth", createPasswordResetRouter(config));
+
+  const meRouter = Router();
+  meRouter.use(createMeInboxRouter());
+  meRouter.use(createMeAccountRouter(config));
+  app.use("/api/me", requireAuth(config), meRouter);
 
   return app;
 }

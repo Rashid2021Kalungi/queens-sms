@@ -2,13 +2,22 @@ import { useCallback, useEffect, useId, useRef, useState } from "react";
 import type { FormEvent } from "react";
 
 type LoginPageProps = {
-  onLogin: () => void | Promise<void>;
+  onLogin: (opts: { rememberEmail: boolean }) => void | Promise<void>;
   loading: boolean;
   error: string | null;
   email: string;
   setEmail: (v: string) => void;
   password: string;
   setPassword: (v: string) => void;
+  /** Initial checked state for “Remember email” (e.g. from saved preference). */
+  defaultRememberEmail: boolean;
+  onForgotPassword: () => void;
+  successBanner: string | null;
+  onDismissSuccessBanner: () => void;
+  /** After password login, when 2FA is required. */
+  twoFactorChallenge?: { maskedEmail: string } | null;
+  onVerifyTwoFactor?: (otp: string) => void | Promise<void>;
+  onCancelTwoFactor?: () => void;
 };
 
 function UserIcon({ className }: { className?: string }) {
@@ -144,10 +153,25 @@ export function LoginPage({
   setEmail,
   password,
   setPassword,
+  defaultRememberEmail,
+  onForgotPassword,
+  successBanner,
+  onDismissSuccessBanner,
+  twoFactorChallenge,
+  onVerifyTwoFactor,
+  onCancelTwoFactor,
 }: LoginPageProps) {
   const emailId = useId();
   const passwordId = useId();
+  const rememberId = useId();
+  const otpId = useId();
+  const [rememberEmail, setRememberEmail] = useState(defaultRememberEmail);
   const [showPassword, setShowPassword] = useState(false);
+  const [otp, setOtp] = useState("");
+
+  useEffect(() => {
+    setRememberEmail(defaultRememberEmail);
+  }, [defaultRememberEmail]);
   const [heroImageOk, setHeroImageOk] = useState(true);
   const [shake, setShake] = useState(false);
   const prevError = useRef<string | null>(null);
@@ -155,9 +179,18 @@ export function LoginPage({
   const handleSubmit = useCallback(
     async (e: FormEvent) => {
       e.preventDefault();
-      await onLogin();
+      await onLogin({ rememberEmail });
     },
-    [onLogin],
+    [onLogin, rememberEmail],
+  );
+
+  const handle2faSubmit = useCallback(
+    async (e: FormEvent) => {
+      e.preventDefault();
+      if (!onVerifyTwoFactor) return;
+      await onVerifyTwoFactor(otp.replace(/\D/g, "").slice(0, 6));
+    },
+    [onVerifyTwoFactor, otp],
   );
 
   useEffect(() => {
@@ -223,15 +256,98 @@ export function LoginPage({
       >
         <div className="neo-card mx-auto w-full max-w-md px-8 py-9 sm:px-10 sm:py-10">
           <h1 className="text-center text-3xl font-bold text-[#2d3436]">
-            Welcome
+            {twoFactorChallenge ? "Verify it’s you" : "Welcome"}
           </h1>
           <p className="mt-1 text-center text-sm font-medium text-[#636e72]">
             Queens Junior School
           </p>
           <p className="mt-2 text-center text-sm text-[#636e72]/85">
-            Log in to your account to continue
+            {twoFactorChallenge
+              ? "Enter the 6-digit code we sent to your email."
+              : "Log in to your account to continue"}
           </p>
 
+          {successBanner ? (
+            <div
+              className="mt-6 flex items-start justify-between gap-2 rounded-xl border border-[#b8d8ba]/80 bg-[#e8f4e9] px-3 py-2.5 text-sm text-[#2d3436]"
+              role="status"
+            >
+              <span>{successBanner}</span>
+              <button
+                type="button"
+                onClick={onDismissSuccessBanner}
+                className="shrink-0 rounded-lg px-1.5 text-[#5a8faf] hover:underline"
+                aria-label="Dismiss"
+              >
+                Dismiss
+              </button>
+            </div>
+          ) : null}
+
+          {twoFactorChallenge ? (
+            <form className="mt-10 space-y-5" onSubmit={handle2faSubmit} noValidate>
+              <p className="rounded-xl border border-[#b9d9eb]/50 bg-[#eef6f9]/80 px-3 py-2 text-center text-xs font-medium text-[#2d3436]">
+                Code sent to{" "}
+                <span className="font-semibold text-[#5a8faf]">
+                  {twoFactorChallenge.maskedEmail}
+                </span>
+              </p>
+              <div>
+                <label htmlFor={otpId} className="sr-only">
+                  Verification code
+                </label>
+                <div className="neo-inset flex h-12 items-center gap-3 px-4 transition-shadow focus-within:ring-2 focus-within:ring-[#b9d9eb]/70">
+                  <LockIcon className="shrink-0 text-[#636e72]" />
+                  <input
+                    id={otpId}
+                    name="otp"
+                    type="text"
+                    inputMode="numeric"
+                    autoComplete="one-time-code"
+                    maxLength={8}
+                    placeholder="6-digit code"
+                    value={otp}
+                    onChange={(e) => setOtp(e.target.value.replace(/\D/g, "").slice(0, 6))}
+                    disabled={loading}
+                    className="min-w-0 flex-1 bg-transparent text-center text-lg font-semibold tracking-[0.25em] text-[#2d3436] outline-none placeholder:text-[#636e72]/50 placeholder:tracking-normal disabled:opacity-60"
+                  />
+                </div>
+              </div>
+              {error ? (
+                <div
+                  className="rounded-2xl border border-[#f0c4c0]/80 bg-gradient-to-br from-[#fce8e5] to-[#f7d1cd]/50 px-3 py-2.5 text-center text-sm font-medium text-[#2d3436]"
+                  role="alert"
+                >
+                  {error}
+                </div>
+              ) : null}
+              <button
+                type="submit"
+                disabled={loading || otp.length < 6}
+                className="h-12 w-full rounded-full bg-gradient-to-br from-[#cde8cf] to-[#8fb892] text-[15px] font-bold text-[#2d3436] shadow-[4px_4px_12px_rgba(120,150,125,0.4),-2px_-2px_8px_rgba(255,255,255,0.85)] transition hover:brightness-105 disabled:cursor-not-allowed disabled:opacity-60"
+              >
+                {loading ? (
+                  <span className="inline-flex items-center justify-center gap-2">
+                    <span className="size-4 animate-spin rounded-full border-2 border-[#2d3436]/25 border-t-[#2d3436]" />
+                    Verifying…
+                  </span>
+                ) : (
+                  "Continue"
+                )}
+              </button>
+              <button
+                type="button"
+                onClick={() => {
+                  setOtp("");
+                  onCancelTwoFactor?.();
+                }}
+                disabled={loading}
+                className="w-full text-center text-xs font-semibold text-[#5a8faf] transition hover:text-[#2d3436] hover:underline disabled:opacity-50"
+              >
+                Use a different account
+              </button>
+            </form>
+          ) : (
           <form className="mt-10 space-y-5" onSubmit={handleSubmit} noValidate>
             <div>
               <label htmlFor={emailId} className="sr-only">
@@ -282,17 +398,27 @@ export function LoginPage({
                   {showPassword ? <EyeOffIcon /> : <EyeIcon />}
                 </button>
               </div>
-              <div className="mt-2 text-right">
+              <div className="mt-3 flex flex-wrap items-center justify-between gap-2">
+                <label
+                  className="flex cursor-pointer items-center gap-2 text-xs font-medium text-[#636e72]"
+                  title="Saves your email on this device and keeps you signed in for 30 days instead of 7."
+                >
+                  <input
+                    id={rememberId}
+                    type="checkbox"
+                    checked={rememberEmail}
+                    onChange={(e) => setRememberEmail(e.target.checked)}
+                    disabled={loading}
+                    className="size-4 rounded border-[#b8d8ba] bg-[#faf7f0] text-[#6a9570] focus:ring-[#b9d9eb]/80"
+                  />
+                  Remember me
+                </label>
                 <button
                   type="button"
                   className="text-xs font-medium text-[#636e72] transition hover:text-[#5a8faf] hover:underline"
-                  onClick={() =>
-                    window.alert(
-                      "Please contact your school administrator to reset your password.",
-                    )
-                  }
+                  onClick={onForgotPassword}
                 >
-                  Forgot your password?
+                  Forgot password?
                 </button>
               </div>
             </div>
@@ -321,6 +447,7 @@ export function LoginPage({
               )}
             </button>
           </form>
+          )}
 
           <div className="mt-10 flex justify-center gap-3">
             <a

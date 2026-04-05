@@ -1,4 +1,5 @@
 import { loadConfig } from "./config.js";
+import { ensureSecuritySchema } from "./db/ensureSecuritySchema.js";
 import { setupDatabase } from "./models/index.js";
 import { buildApp } from "./app.js";
 
@@ -6,10 +7,31 @@ const config = loadConfig();
 const sequelize = setupDatabase(config);
 
 await sequelize.authenticate();
+await ensureSecuritySchema(sequelize);
 
-// One-time schema sync from Sequelize models: uncomment, run `npm run dev` once, then comment
-// again. Leaving `sync({ alter: true })` enabled can recreate/alter indexes on every startup.
-// await sequelize.sync({ alter: true });
+if (config.NODE_ENV === "development") {
+  const skipSync =
+    process.env.DB_SYNC_ON_START === "false" ||
+    process.env.DB_SYNC_ON_START === "0";
+  if (!skipSync) {
+    console.info(
+      "[db] Development — syncing MySQL schema from Sequelize models (alter: true)…",
+    );
+    try {
+      await sequelize.sync({ alter: true });
+      console.info("[db] Schema sync finished.");
+    } catch (err) {
+      console.error(
+        "[db] sequelize.sync({ alter: true }) failed — API will still start.\n" +
+          "  Fix: run SQL from backend/db/schema.sql, or cd backend && npm run db:sync after fixing indexes.\n" +
+          "  To skip sync: set DB_SYNC_ON_START=false",
+        err,
+      );
+    }
+  } else {
+    console.info("[db] Schema sync skipped (DB_SYNC_ON_START=false).");
+  }
+}
 
 const app = buildApp(config);
 

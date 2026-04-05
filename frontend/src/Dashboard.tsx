@@ -1,6 +1,18 @@
-import type { ReactNode } from "react";
+import { useCallback, useEffect, useState, type ReactNode } from "react";
+import {
+  markAllMessagesRead,
+  markAllNotificationsRead,
+  fetchMessages,
+  fetchNotifications,
+} from "./api/inbox";
 import { AdminLayout, type AdminUser } from "./components/admin/AdminLayout";
+import { InboxDetailView } from "./components/inbox/InboxDetailView";
+import { InboxListView } from "./components/inbox/InboxListView";
+import type { InboxItem } from "./components/admin/headerInboxDemo";
+import { SettingsModesPanel } from "./components/settings/SettingsModesPanel";
 import { demoLearners, type DemoLearner } from "./data/productSpec";
+import { useI18n } from "./i18n/I18nProvider";
+import { formatShortAgo } from "./utils/formatShortAgo";
 
 type DashboardProps = {
   user: AdminUser | null;
@@ -8,19 +20,21 @@ type DashboardProps = {
   profileError: string | null;
   onRetryProfile: () => void;
   onLogout: () => void;
+  onAccountUpdated?: () => void;
 };
 
 const learnerToolbarBtn =
   "rounded-xl bg-gradient-to-br from-[#faf7f0] to-[#ebe4d9] p-2.5 text-[#636e72] shadow-[2px_2px_5px_rgba(200,188,170,0.35),-1px_-1px_4px_rgba(255,255,255,0.9)] transition hover:text-[#5a8faf] active:translate-y-px";
 
 function LearnerProfileCard({ learner }: { learner: DemoLearner }) {
+  const { t } = useI18n();
   const fields = [
-    { label: "Gender", value: learner.gender },
-    { label: "Roll no.", value: learner.roll },
-    { label: "Admission ID", value: learner.admissionId },
-    { label: "Admitted", value: learner.admissionDate },
-    { label: "Class", value: learner.className },
-    { label: "Section", value: learner.section },
+    { label: t("learner.gender"), value: learner.gender },
+    { label: t("learner.roll"), value: learner.roll },
+    { label: t("learner.admissionId"), value: learner.admissionId },
+    { label: t("learner.admitted"), value: learner.admissionDate },
+    { label: t("learner.class"), value: learner.className },
+    { label: t("learner.section"), value: learner.section },
   ];
 
   return (
@@ -35,9 +49,9 @@ function LearnerProfileCard({ learner }: { learner: DemoLearner }) {
         <div
           className="flex shrink-0 flex-wrap justify-end gap-1.5 rounded-xl bg-[#f5f0e6]/80 p-1.5 ring-1 ring-[#ebe4d9]/90"
           role="toolbar"
-          aria-label="Learner actions"
+          aria-label={t("learner.toolbar")}
         >
-          <button type="button" title="View" aria-label="View profile" className={learnerToolbarBtn}>
+          <button type="button" title={t("learner.view")} aria-label={t("learner.view")} className={learnerToolbarBtn}>
             <svg className="h-4 w-4" fill="none" viewBox="0 0 24 24" aria-hidden>
               <path
                 stroke="currentColor"
@@ -48,7 +62,7 @@ function LearnerProfileCard({ learner }: { learner: DemoLearner }) {
               <circle cx="12" cy="12" r="2.5" stroke="currentColor" strokeWidth="1.6" />
             </svg>
           </button>
-          <button type="button" title="Print" aria-label="Print" className={learnerToolbarBtn}>
+          <button type="button" title={t("learner.print")} aria-label={t("learner.print")} className={learnerToolbarBtn}>
             <svg className="h-4 w-4" fill="none" viewBox="0 0 24 24" aria-hidden>
               <path
                 stroke="currentColor"
@@ -59,7 +73,7 @@ function LearnerProfileCard({ learner }: { learner: DemoLearner }) {
               <path stroke="currentColor" strokeWidth="1.6" d="M7 14h10" />
             </svg>
           </button>
-          <button type="button" title="Download" aria-label="Download" className={learnerToolbarBtn}>
+          <button type="button" title={t("learner.download")} aria-label={t("learner.download")} className={learnerToolbarBtn}>
             <svg className="h-4 w-4" fill="none" viewBox="0 0 24 24" aria-hidden>
               <path
                 stroke="currentColor"
@@ -69,7 +83,7 @@ function LearnerProfileCard({ learner }: { learner: DemoLearner }) {
               />
             </svg>
           </button>
-          <button type="button" title="Upload" aria-label="Upload document" className={learnerToolbarBtn}>
+          <button type="button" title={t("learner.upload")} aria-label={t("learner.upload")} className={learnerToolbarBtn}>
             <svg className="h-4 w-4" fill="none" viewBox="0 0 24 24" aria-hidden>
               <path
                 stroke="currentColor"
@@ -88,7 +102,7 @@ function LearnerProfileCard({ learner }: { learner: DemoLearner }) {
             <span aria-hidden>🎓</span>
           </div>
           <p className="hidden text-center text-[10px] font-semibold uppercase tracking-wide text-[#636e72] sm:block">
-            Photo
+            {t("learner.photo")}
           </p>
         </div>
 
@@ -110,7 +124,7 @@ function LearnerProfileCard({ learner }: { learner: DemoLearner }) {
       </div>
 
       <p className="border-t border-[#ebe4d9]/80 bg-[#faf7f0]/40 px-4 py-2.5 text-[11px] leading-relaxed text-[#636e72]">
-        Demo data — parent portal will load linked children from the API.
+        {t("learner.demoFooter")}
       </p>
     </article>
   );
@@ -146,14 +160,14 @@ function StatCard({
 
 const smsDirectoryStats: {
   value: string;
-  title: string;
+  titleKey: string;
   className: string;
   iconTint: string;
   icon: ReactNode;
 }[] = [
   {
     value: "8",
-    title: "Total students",
+    titleKey: "stat.totalStudents",
     className: "bg-gradient-to-br from-[#fce8e5] via-[#f7d1cd] to-[#efd5d2]",
     iconTint: "bg-gradient-to-br from-[#fad5d0] to-[#f0b8b2] text-[#2d3436]",
     icon: (
@@ -169,7 +183,7 @@ const smsDirectoryStats: {
   },
   {
     value: "2",
-    title: "Total teachers",
+    titleKey: "stat.totalTeachers",
     className: "bg-gradient-to-br from-[#e8f4e9] via-[#d4ead6] to-[#c5e3c8]",
     iconTint: "bg-gradient-to-br from-[#cde8cf] to-[#b8d8ba] text-[#2d3436]",
     icon: (
@@ -184,7 +198,7 @@ const smsDirectoryStats: {
   },
   {
     value: "1",
-    title: "Total parents",
+    titleKey: "stat.totalParents",
     className: "bg-gradient-to-br from-[#e8f2fa] via-[#d4e8f5] to-[#c5dff0]",
     iconTint: "bg-gradient-to-br from-[#c9e2f2] to-[#b9d9eb] text-[#2d3436]",
     icon: (
@@ -200,7 +214,7 @@ const smsDirectoryStats: {
   },
   {
     value: "2",
-    title: "Total librarians",
+    titleKey: "stat.totalLibrarians",
     className: "bg-gradient-to-br from-[#dfe8f5] via-[#c5d4eb] to-[#a8bdd9]",
     iconTint: "bg-gradient-to-br from-[#b9c9e0] to-[#8fa8c9] text-[#2d3436]",
     icon: (
@@ -215,7 +229,7 @@ const smsDirectoryStats: {
   },
   {
     value: "1",
-    title: "Total accountants",
+    titleKey: "stat.totalAccountants",
     className: "bg-gradient-to-br from-[#e5f2e6] via-[#d0e6d2] to-[#b8d8ba]",
     iconTint: "bg-gradient-to-br from-[#b8d8ba] to-[#8fb892] text-[#2d3436]",
     icon: (
@@ -231,7 +245,7 @@ const smsDirectoryStats: {
   },
   {
     value: "2",
-    title: "Total enquiries",
+    titleKey: "stat.totalEnquiries",
     className: "bg-gradient-to-br from-[#fce8e5] via-[#f5d0cc] to-[#e8b8b2]",
     iconTint: "bg-gradient-to-br from-[#f0c4be] to-[#e8a8a2] text-[#2d3436]",
     icon: (
@@ -247,7 +261,7 @@ const smsDirectoryStats: {
   },
   {
     value: "0",
-    title: "All messages",
+    titleKey: "stat.allMessages",
     className: "bg-gradient-to-br from-[#dfe5ee] via-[#c8d3e3] to-[#a8b8ce]",
     iconTint: "bg-gradient-to-br from-[#aebfcf] to-[#8fa0b5] text-[#2d3436]",
     icon: (
@@ -262,7 +276,7 @@ const smsDirectoryStats: {
   },
   {
     value: "0",
-    title: "Present today (attendance)",
+    titleKey: "stat.presentToday",
     className: "bg-gradient-to-br from-[#e8f2fa] via-[#d4e8f5] to-[#c5dff0]",
     iconTint: "bg-gradient-to-br from-[#b9d9eb] to-[#8bb8d4] text-[#2d3436]",
     icon: (
@@ -274,6 +288,7 @@ const smsDirectoryStats: {
 ];
 
 function EventScheduleCard() {
+  const { t } = useI18n();
   const monthLabel = "April 2026";
   const startPad = 3;
   const daysInMonth = 30;
@@ -284,7 +299,7 @@ function EventScheduleCard() {
 
   return (
     <section className="neo-card flex h-full flex-col p-4 sm:p-5">
-      <h2 className="border-b border-[#ebe4d9] pb-2 text-sm font-semibold text-[#2d3436]">Event schedule</h2>
+      <h2 className="border-b border-[#ebe4d9] pb-2 text-sm font-semibold text-[#2d3436]">{t("dashboard.eventSchedule")}</h2>
       <p className="mt-3 text-center text-xs font-bold uppercase tracking-wide text-[#636e72]">{monthLabel}</p>
       <div className="mt-2 grid grid-cols-7 gap-1 text-center text-[10px] font-semibold text-[#636e72]">
         {["S", "M", "T", "W", "T", "F", "S"].map((d, i) => (
@@ -309,12 +324,13 @@ function EventScheduleCard() {
           ),
         )}
       </div>
-      <p className="mt-3 text-xs text-[#636e72]">Demo calendar — connect school events API.</p>
+      <p className="mt-3 text-xs text-[#636e72]">{t("dashboard.eventDemo")}</p>
     </section>
   );
 }
 
 function StatisticsChartCard() {
+  const { t } = useI18n();
   const coords: [number, number][] = [
     [0, 55],
     [30, 40],
@@ -330,8 +346,8 @@ function StatisticsChartCard() {
 
   return (
     <section className="neo-card flex h-full flex-col p-4 sm:p-5">
-      <h2 className="border-b border-[#ebe4d9] pb-2 text-sm font-semibold text-[#2d3436]">Statistics chart</h2>
-      <p className="mt-2 text-xs text-[#636e72]">Demo trend — replace with live analytics.</p>
+      <h2 className="border-b border-[#ebe4d9] pb-2 text-sm font-semibold text-[#2d3436]">{t("dashboard.statisticsChart")}</h2>
+      <p className="mt-2 text-xs text-[#636e72]">{t("dashboard.chartDemo")}</p>
       <div className="neo-inset-field mt-4 flex min-h-[180px] flex-1 items-end justify-center rounded-2xl p-4">
         <svg viewBox="0 0 200 80" className="h-full w-full max-h-40 text-[#6a9570]" aria-hidden>
           <defs>
@@ -376,6 +392,21 @@ const notices = [
   },
 ];
 
+type InboxScreen =
+  | { screen: "home" }
+  | { screen: "list"; kind: "notifications" | "messages" }
+  | { screen: "detail"; kind: "notifications" | "messages"; id: number };
+
+function mapToHeaderItems(rows: { id: number; title: string; body: string; read: boolean; createdAt: string }[]): InboxItem[] {
+  return rows.map((x) => ({
+    id: String(x.id),
+    title: x.title,
+    body: x.body,
+    read: x.read,
+    time: formatShortAgo(x.createdAt),
+  }));
+}
+
 const expenseRows = [
   {
     id: "EXP-1042",
@@ -409,14 +440,119 @@ export function Dashboard({
   profileError,
   onRetryProfile,
   onLogout,
+  onAccountUpdated,
 }: DashboardProps) {
+  const { t } = useI18n();
+  const [settingsPanel, setSettingsPanel] = useState<string | null>(null);
+  const [inboxScreen, setInboxScreen] = useState<InboxScreen>({ screen: "home" });
+  const [headerNotifications, setHeaderNotifications] = useState<InboxItem[]>([]);
+  const [headerMessages, setHeaderMessages] = useState<InboxItem[]>([]);
+
+  const refreshHeaderInbox = useCallback(async () => {
+    try {
+      const [n, m] = await Promise.all([
+        fetchNotifications({ unreadOnly: true }),
+        fetchMessages({ unreadOnly: true }),
+      ]);
+      setHeaderNotifications(mapToHeaderItems(n));
+      setHeaderMessages(mapToHeaderItems(m));
+    } catch {
+      setHeaderNotifications([]);
+      setHeaderMessages([]);
+    }
+  }, []);
+
+  useEffect(() => {
+    void refreshHeaderInbox();
+  }, [refreshHeaderInbox]);
+
   return (
     <AdminLayout
       user={user}
       profileLoading={profileLoading}
       onLogout={onLogout}
+      headerNotifications={headerNotifications}
+      headerMessages={headerMessages}
+      onMarkAllNotificationsRead={async () => {
+        await markAllNotificationsRead();
+        await refreshHeaderInbox();
+      }}
+      onMarkAllMessagesRead={async () => {
+        await markAllMessagesRead();
+        await refreshHeaderInbox();
+      }}
+      onOpenNotificationFromHeader={(id) => {
+        setSettingsPanel(null);
+        setInboxScreen({
+          screen: "detail",
+          kind: "notifications",
+          id: Number.parseInt(id, 10),
+        });
+      }}
+      onOpenMessageFromHeader={(id) => {
+        setSettingsPanel(null);
+        setInboxScreen({
+          screen: "detail",
+          kind: "messages",
+          id: Number.parseInt(id, 10),
+        });
+      }}
+      onReadMoreNotifications={() => {
+        setSettingsPanel(null);
+        setInboxScreen({ screen: "list", kind: "notifications" });
+      }}
+      onReadMoreMessages={() => {
+        setSettingsPanel(null);
+        setInboxScreen({ screen: "list", kind: "messages" });
+      }}
+      onOpenInboxList={(kind) => {
+        setSettingsPanel(null);
+        setInboxScreen({ screen: "list", kind });
+      }}
+      onDashboardHome={() => {
+        setSettingsPanel(null);
+        setInboxScreen({ screen: "home" });
+      }}
+      onSelectSettingsPanel={(panel) => {
+        setInboxScreen({ screen: "home" });
+        setSettingsPanel(panel);
+      }}
+      onAccountUpdated={onAccountUpdated}
     >
-      <main className="p-4 sm:p-6">
+      <main className="dashboard-main-padding">
+        {settingsPanel === "modes" ? (
+          <SettingsModesPanel onBack={() => setSettingsPanel(null)} />
+        ) : null}
+        {settingsPanel === "modes" ? null : inboxScreen.screen !== "home" ? (
+          inboxScreen.screen === "list" ? (
+            <InboxListView
+              kind={inboxScreen.kind}
+              onBack={() => setInboxScreen({ screen: "home" })}
+              onSelectItem={(id) =>
+                setInboxScreen({
+                  screen: "detail",
+                  kind: inboxScreen.kind,
+                  id,
+                })
+              }
+              onInboxChanged={refreshHeaderInbox}
+            />
+          ) : (
+            <InboxDetailView
+              kind={inboxScreen.kind}
+              id={inboxScreen.id}
+              onBack={() =>
+                setInboxScreen({
+                  screen: "list",
+                  kind: inboxScreen.kind,
+                })
+              }
+              onInboxChanged={refreshHeaderInbox}
+            />
+          )
+        ) : null}
+        {settingsPanel === "modes" || inboxScreen.screen !== "home" ? null : (
+          <>
         {profileError ? (
           <div
             className="neo-card mb-6 flex flex-wrap items-center justify-between gap-3 px-4 py-3 text-sm text-[#2d3436]"
@@ -428,7 +564,7 @@ export function Dashboard({
               onClick={onRetryProfile}
               className="shrink-0 rounded-full bg-gradient-to-br from-[#b8d8ba] to-[#8fb892] px-5 py-2 text-sm font-bold text-[#2d3436] shadow-[3px_3px_8px_rgba(120,150,125,0.4),-2px_-2px_6px_rgba(255,255,255,0.8)] transition hover:brightness-105"
             >
-              Retry
+              {t("dashboard.retry")}
             </button>
           </div>
         ) : null}
@@ -438,17 +574,15 @@ export function Dashboard({
             id="sms-overview-heading"
             className="mb-3 text-xs font-bold uppercase tracking-wide text-[#636e72]"
           >
-            Directory overview
+            {t("dashboard.directoryOverview")}
           </h2>
-          <p className="mb-3 text-xs text-[#636e72]">
-            Classic SMS-style counts (demo figures) alongside your existing dashboard widgets.
-          </p>
+          <p className="mb-3 text-xs text-[#636e72]">{t("dashboard.directoryHint")}</p>
           <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-4">
             {smsDirectoryStats.map((s) => (
               <StatCard
-                key={s.title}
+                key={s.titleKey}
                 value={s.value}
-                title={s.title}
+                title={t(s.titleKey)}
                 className={s.className}
                 iconTint={s.iconTint}
                 icon={s.icon}
@@ -464,7 +598,7 @@ export function Dashboard({
 
         <div className="mb-6 grid gap-4 sm:grid-cols-2 xl:grid-cols-4">
           <StatCard
-            title="Due fees (demo)"
+            title={t("dashboard.dueFees")}
             value="1,500"
             className="bg-gradient-to-br from-[#fce8e5] via-[#f7d1cd] to-[#efd5d2]"
             iconTint="bg-gradient-to-br from-[#fad5d0] to-[#f0b8b2] text-[#2d3436]"
@@ -479,7 +613,7 @@ export function Dashboard({
             }
           />
           <StatCard
-            title="Upcoming exams"
+            title={t("dashboard.upcomingExams")}
             value="15"
             className="bg-gradient-to-br from-[#e8f4e9] via-[#d4ead6] to-[#c5e3c8]"
             iconTint="bg-gradient-to-br from-[#cde8cf] to-[#b8d8ba] text-[#2d3436]"
@@ -494,7 +628,7 @@ export function Dashboard({
             }
           />
           <StatCard
-            title="Results published"
+            title={t("dashboard.resultsPublished")}
             value="08"
             className="bg-gradient-to-br from-[#e8f2fa] via-[#d4e8f5] to-[#c5dff0]"
             iconTint="bg-gradient-to-br from-[#c9e2f2] to-[#b9d9eb] text-[#2d3436]"
@@ -509,7 +643,7 @@ export function Dashboard({
             }
           />
           <StatCard
-            title="Term expenses (demo)"
+            title={t("dashboard.termExpenses")}
             value="10K"
             className="bg-gradient-to-br from-[#f2ebe4] via-[#ebe4d9] to-[#dceef6]"
             iconTint="bg-gradient-to-br from-[#e0ebe8] to-[#c9e2f2] text-[#2d3436]"
@@ -535,7 +669,7 @@ export function Dashboard({
             <aside className="flex min-h-0 lg:min-h-full">
               <section className="neo-card flex h-full w-full flex-col p-5">
                 <h2 className="border-b border-[#ebe4d9] pb-3 font-semibold text-[#2d3436]">
-                  Notice board
+                  {t("dashboard.noticeBoard")}
                 </h2>
                 <ul className="mt-4 space-y-4">
                   {notices.map((n, i) => (
@@ -553,37 +687,37 @@ export function Dashboard({
           <div className="grid gap-6 lg:grid-cols-2">
             <article className="neo-card flex h-full flex-col bg-gradient-to-br from-[#faf7f0] to-[#e8f2fa] p-5">
               <h2 className="text-sm font-bold uppercase tracking-wide text-[#636e72]">
-                School snapshot
+                {t("dashboard.schoolSnapshot")}
               </h2>
               <p className="mt-3 text-3xl font-bold text-[#2d3436]">—</p>
-              <p className="text-sm text-[#636e72]">Active students (connect API)</p>
+              <p className="text-sm text-[#636e72]">{t("dashboard.activeStudentsHint")}</p>
               <div className="mt-auto flex gap-2 border-t border-[#ebe4d9] pt-4">
                 <button
                   type="button"
                   className="rounded-full bg-gradient-to-br from-[#faf7f0] to-[#ebe4d9] px-4 py-1.5 text-xs font-semibold text-[#2d3436] shadow-[3px_3px_6px_rgba(200,188,170,0.35),-2px_-2px_5px_rgba(255,255,255,0.85)] transition hover:text-[#5a8faf]"
                 >
-                  View
+                  {t("dashboard.view")}
                 </button>
                 <button
                   type="button"
                   className="rounded-full bg-gradient-to-br from-[#faf7f0] to-[#ebe4d9] px-4 py-1.5 text-xs font-semibold text-[#2d3436] shadow-[3px_3px_6px_rgba(200,188,170,0.35),-2px_-2px_5px_rgba(255,255,255,0.85)] transition hover:text-[#5a8faf]"
                 >
-                  Export
+                  {t("dashboard.export")}
                 </button>
               </div>
             </article>
             <article className="neo-card flex h-full flex-col bg-gradient-to-br from-[#f5f0e6] to-[#e8f4e9] p-5">
               <h2 className="text-sm font-bold uppercase tracking-wide text-[#636e72]">
-                Classes & sections
+                {t("dashboard.classesSections")}
               </h2>
               <p className="mt-3 text-3xl font-bold text-[#2d3436]">—</p>
-              <p className="text-sm text-[#636e72]">Homerooms this year</p>
+              <p className="text-sm text-[#636e72]">{t("dashboard.homeroomsHint")}</p>
               <div className="mt-auto flex gap-2 border-t border-[#ebe4d9] pt-4">
                 <button
                   type="button"
                   className="rounded-full bg-gradient-to-br from-[#cde8cf] to-[#b8d8ba] px-4 py-1.5 text-xs font-bold text-[#2d3436] shadow-[3px_3px_6px_rgba(120,150,125,0.3),-2px_-2px_5px_rgba(255,255,255,0.85)] transition hover:brightness-105"
                 >
-                  Manage
+                  {t("dashboard.manage")}
                 </button>
               </div>
             </article>
@@ -628,23 +762,23 @@ export function Dashboard({
 
           <section className="neo-card-elevated overflow-hidden">
             <div className="flex flex-wrap items-center justify-between gap-3 border-b border-[#ebe4d9] bg-gradient-to-r from-[#f8f9f6] to-[#eef6f9] px-5 py-4">
-              <h2 className="font-semibold text-[#2d3436]">Recent expenses</h2>
+              <h2 className="font-semibold text-[#2d3436]">{t("dashboard.recentExpenses")}</h2>
               <div className="flex flex-wrap gap-2">
                 <input
                   type="text"
-                  placeholder="ID"
+                  placeholder={t("dashboard.expense.id")}
                   className="neo-inset-field w-24 px-2 py-1.5 text-sm text-[#2d3436] placeholder:text-[#636e72]/70"
                 />
                 <input
                   type="text"
-                  placeholder="Date"
+                  placeholder={t("dashboard.expense.date")}
                   className="neo-inset-field w-28 px-2 py-1.5 text-sm text-[#2d3436] placeholder:text-[#636e72]/70"
                 />
                 <button
                   type="button"
                   className="rounded-full bg-gradient-to-br from-[#b8d8ba] to-[#8fb892] px-5 py-1.5 text-sm font-bold text-[#2d3436] shadow-[3px_3px_8px_rgba(120,150,125,0.35),-2px_-2px_6px_rgba(255,255,255,0.85)] transition hover:brightness-105"
                 >
-                  Search
+                  {t("dashboard.search")}
                 </button>
               </div>
             </div>
@@ -652,12 +786,12 @@ export function Dashboard({
               <table className="w-full min-w-[640px] text-left text-sm">
                 <thead className="border-b border-[#ebe4d9] bg-[#faf7f0] text-xs font-bold uppercase text-[#636e72]">
                   <tr>
-                    <th className="px-5 py-3">ID</th>
-                    <th className="px-5 py-3">Type</th>
-                    <th className="px-5 py-3">Amount</th>
-                    <th className="px-5 py-3">Status</th>
-                    <th className="px-5 py-3">Email</th>
-                    <th className="px-5 py-3">Date</th>
+                    <th className="px-5 py-3">{t("dashboard.expense.id")}</th>
+                    <th className="px-5 py-3">{t("dashboard.expense.type")}</th>
+                    <th className="px-5 py-3">{t("dashboard.expense.amount")}</th>
+                    <th className="px-5 py-3">{t("dashboard.expense.status")}</th>
+                    <th className="px-5 py-3">{t("dashboard.expense.email")}</th>
+                    <th className="px-5 py-3">{t("dashboard.expense.date")}</th>
                   </tr>
                 </thead>
                 <tbody className="divide-y divide-slate-100">
@@ -674,7 +808,9 @@ export function Dashboard({
                               : "bg-rose-100 text-rose-800"
                           }`}
                         >
-                          {row.status}
+                          {row.status === "Paid"
+                            ? t("dashboard.status.paid")
+                            : t("dashboard.status.due")}
                         </span>
                       </td>
                         <td className="max-w-[140px] truncate px-5 py-3 text-[#636e72]">
@@ -688,6 +824,8 @@ export function Dashboard({
             </div>
           </section>
         </div>
+          </>
+        )}
       </main>
     </AdminLayout>
   );
