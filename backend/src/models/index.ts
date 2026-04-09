@@ -53,6 +53,12 @@ export class Student extends Model {
   declare district: string | null;
   declare registrationType: string;
   declare previousSchool: string | null;
+  declare previousSchoolLocation: string | null;
+  declare lastClassAttended: string | null;
+  declare lastTermYear: string | null;
+  declare previousReportCardFilename: string | null;
+  declare previousGrades: string | null;
+  declare transferReason: string | null;
   declare parentAliveStatus: "both" | "one" | "none" | null;
   declare parentFullName: string | null;
   declare parentPhone: string | null;
@@ -314,6 +320,36 @@ export function setupDatabase(config: Config): Sequelize {
         type: DataTypes.STRING(200),
         allowNull: true,
         field: "previous_school",
+      },
+      previousSchoolLocation: {
+        type: DataTypes.STRING(200),
+        allowNull: true,
+        field: "previous_school_location",
+      },
+      lastClassAttended: {
+        type: DataTypes.STRING(120),
+        allowNull: true,
+        field: "last_class_attended",
+      },
+      lastTermYear: {
+        type: DataTypes.STRING(40),
+        allowNull: true,
+        field: "last_term_year",
+      },
+      previousReportCardFilename: {
+        type: DataTypes.STRING(255),
+        allowNull: true,
+        field: "previous_report_card_filename",
+      },
+      previousGrades: {
+        type: DataTypes.STRING(200),
+        allowNull: true,
+        field: "previous_grades",
+      },
+      transferReason: {
+        type: DataTypes.STRING(120),
+        allowNull: true,
+        field: "transfer_reason",
       },
       parentAliveStatus: {
         type: DataTypes.STRING(16),

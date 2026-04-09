@@ -372,7 +372,6 @@ function buildNavGroups(t: (key: string) => string): NavGroup[] {
       items: [
         { icon: IconUsers, label: t("nav.students.all"), studentSection: "all" },
         { icon: IconClipboard, label: t("nav.students.admissions"), studentSection: "admissions" },
-        { icon: IconGradCap, label: t("nav.students.profiles"), studentSection: "profiles" },
         { icon: IconClipboard, label: t("nav.students.import"), studentSection: "import" },
         { icon: IconUsers, label: t("nav.students.parents"), studentSection: "parents" },
       ],

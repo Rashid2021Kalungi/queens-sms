@@ -161,9 +161,7 @@ export function StudentsListPanel({
       name: t("students.col.name"),
       class: t("students.col.class"),
       section: t("students.col.section"),
-      roll: t("students.col.roll"),
       dob: t("students.col.dob"),
-      parentEmail: t("students.col.parentEmail"),
       admitted: t("students.col.admitted"),
       nationality: t("students.col.nationality"),
       country: t("students.col.country"),
@@ -361,9 +359,8 @@ export function StudentsListPanel({
                 <th className="w-[18%] px-1 py-3 sm:px-2">{t("students.col.name")}</th>
                 <th className="w-[12%] px-1 py-3 sm:px-2">{t("students.col.class")}</th>
                 <th className="w-[9%] px-1 py-3 sm:px-2">{t("students.col.section")}</th>
-                <th className="w-[8%] px-1 py-3 sm:px-2">{t("students.col.roll")}</th>
                 <th className="w-[11%] px-1 py-3 sm:px-2">{t("students.col.dob")}</th>
-                <th className="w-[10%] px-1 py-3 sm:px-2">{t("students.col.admitted")}</th>
+                <th className="w-[12%] px-1 py-3 sm:px-2">{t("students.col.admitted")}</th>
                 {showDirectoryTools ? (
                   <th className="w-24 px-1 py-3 text-center sm:w-28 sm:px-2">
                     {t("students.col.actions")}
@@ -375,7 +372,7 @@ export function StudentsListPanel({
               {loading ? (
                 <tr>
                   <td
-                    colSpan={showDirectoryTools ? 9 : 7}
+                    colSpan={showDirectoryTools ? 8 : 6}
                     className="px-5 py-10 text-center text-sm text-[#636e72]"
                   >
                     {t("students.loading")}
@@ -385,7 +382,7 @@ export function StudentsListPanel({
               {!loading && items.length === 0 ? (
                 <tr>
                   <td
-                    colSpan={showDirectoryTools ? 9 : 7}
+                    colSpan={showDirectoryTools ? 8 : 6}
                     className="px-5 py-10 text-center text-sm text-[#636e72]"
                   >
                     {applied ? t("students.noMatches") : t("students.empty")}
@@ -421,9 +418,6 @@ export function StudentsListPanel({
                       </td>
                       <td className="min-w-0 truncate px-1 py-2 text-xs text-[#636e72] sm:px-2 sm:text-sm">
                         {row.sectionName ?? "—"}
-                      </td>
-                      <td className="min-w-0 truncate px-1 py-2 text-xs text-[#636e72] sm:px-2 sm:text-sm">
-                        {row.rollNumber ?? "—"}
                       </td>
                       <td className="min-w-0 truncate px-1 py-2 text-[10px] tabular-nums text-[#636e72] sm:px-2 sm:text-sm">
                         {row.dateOfBirthFormatted ?? "—"}

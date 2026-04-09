@@ -48,7 +48,6 @@ export function StudentDetailModal({
   const [dateOfBirth, setDateOfBirth] = useState("");
   const [parentEmail, setParentEmail] = useState("");
   const [gender, setGender] = useState("");
-  const [rollNumber, setRollNumber] = useState("");
   const [sectionName, setSectionName] = useState("");
   const [classRoomId, setClassRoomId] = useState("");
   const [nationalities, setNationalities] = useState<string[]>([]);
@@ -108,7 +107,6 @@ export function StudentDetailModal({
         setDateOfBirth(s.dateOfBirth ?? "");
         setParentEmail(s.parentEmail ?? "");
         setGender(s.gender ?? "");
-        setRollNumber(s.rollNumber ?? "");
         setSectionName(s.sectionName ?? "");
         setClassRoomId(s.classRoomId != null ? String(s.classRoomId) : "");
         setNationality(s.nationality ?? "");
@@ -426,10 +424,6 @@ export function StudentDetailModal({
                     <dd className="font-medium text-[#2d3436]">{row.gender ?? "—"}</dd>
                   </div>
                   <div className="flex justify-between gap-4 border-b border-[#f0ebe3] py-2">
-                    <dt className="text-[#636e72]">{t("students.col.roll")}</dt>
-                    <dd className="font-medium text-[#2d3436]">{row.rollNumber ?? "—"}</dd>
-                  </div>
-                  <div className="flex justify-between gap-4 border-b border-[#f0ebe3] py-2">
                     <dt className="text-[#636e72]">{t("students.col.dob")}</dt>
                     <dd className="font-medium text-[#2d3436]">
                       {row.dateOfBirthFormatted ?? "—"}
@@ -592,14 +586,6 @@ export function StudentDetailModal({
                       <option value="Male">{t("students.form.genderMale")}</option>
                       <option value="Other">{t("students.form.genderOther")}</option>
                     </select>
-                  </label>
-                  <label className="block text-xs font-semibold text-[#636e72]">
-                    {t("students.form.roll")}
-                    <input
-                      className={`${fieldClass} mt-1`}
-                      value={rollNumber}
-                      onChange={(e) => setRollNumber(e.target.value)}
-                    />
                   </label>
                   <label className="block text-xs font-semibold text-[#636e72] sm:col-span-2">
                     {t("students.form.section")}

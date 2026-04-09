@@ -456,8 +456,6 @@ function readPersistedViewState(): PersistedViewState | null {
         : "dashboard";
     const studentSection =
       parsed.studentSection === "admissions" ||
-      parsed.studentSection === "profiles" ||
-      parsed.studentSection === "parents" ||
       parsed.studentSection === "import"
         ? parsed.studentSection
         : "all";

@@ -29,6 +29,12 @@ export type StudentApiRow = {
   district: string | null;
   registrationType: string;
   previousSchool: string | null;
+  previousSchoolLocation: string | null;
+  lastClassAttended: string | null;
+  lastTermYear: string | null;
+  previousReportCardFilename: string | null;
+  previousGrades: string | null;
+  transferReason: string | null;
   parentAliveStatus: string | null;
   parentFullName: string | null;
   parentPhone: string | null;
@@ -118,6 +124,11 @@ export type CreateStudentBody = {
   district?: string;
   registrationType?: "first" | "continuing";
   previousSchool?: string;
+  previousSchoolLocation?: string;
+  lastClassAttended?: string;
+  lastTermYear?: string;
+  previousGrades?: string;
+  transferReason?: "relocation" | "discipline" | "better_education";
   parentAliveStatus?: "both" | "one" | "none";
   parentFullName?: string;
   parentPhone?: string;
@@ -163,6 +174,11 @@ export type UpdateStudentBody = {
   district?: string | null;
   registrationType?: "first" | "continuing";
   previousSchool?: string | null;
+  previousSchoolLocation?: string | null;
+  lastClassAttended?: string | null;
+  lastTermYear?: string | null;
+  previousGrades?: string | null;
+  transferReason?: "relocation" | "discipline" | "better_education" | null;
   parentAliveStatus?: "both" | "one" | "none" | null;
   parentFullName?: string | null;
   parentPhone?: string | null;
@@ -213,6 +229,26 @@ export async function uploadStudentPhoto(id: number, file: File): Promise<Studen
   const fd = new FormData();
   fd.append("photo", file);
   const res = await fetch(apiUrl(`/api/me/students/${id}/photo`), {
+    method: "POST",
+    headers: { ...authHeaders() },
+    body: fd,
+  });
+  if (res.status === 401) throw new Error("Unauthorized");
+  if (!res.ok) {
+    const err = await readJson<{ error?: string }>(res).catch(() => null);
+    throw new Error(err?.error ?? "Request failed");
+  }
+  const data = await readJson<{ item: StudentApiRow }>(res);
+  return data.item;
+}
+
+export async function uploadStudentTransferReport(
+  id: number,
+  file: File,
+): Promise<StudentApiRow> {
+  const fd = new FormData();
+  fd.append("report", file);
+  const res = await fetch(apiUrl(`/api/me/students/${id}/transfer-report`), {
     method: "POST",
     headers: { ...authHeaders() },
     body: fd,

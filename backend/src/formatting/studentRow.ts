@@ -27,6 +27,12 @@ export type StudentApiRow = {
   /** `first` | `continuing` */
   registrationType: string;
   previousSchool: string | null;
+  previousSchoolLocation: string | null;
+  lastClassAttended: string | null;
+  lastTermYear: string | null;
+  previousReportCardFilename: string | null;
+  previousGrades: string | null;
+  transferReason: string | null;
   parentAliveStatus: string | null;
   parentFullName: string | null;
   parentPhone: string | null;
@@ -85,6 +91,30 @@ export function studentToApiRow(s: Student): StudentApiRow {
     district: s.district ?? null,
     registrationType: reg,
     previousSchool: s.previousSchool ?? null,
+    previousSchoolLocation:
+      (s.get("previous_school_location") as string | null | undefined) ??
+      (s as unknown as { previousSchoolLocation?: string | null }).previousSchoolLocation ??
+      null,
+    lastClassAttended:
+      (s.get("last_class_attended") as string | null | undefined) ??
+      (s as unknown as { lastClassAttended?: string | null }).lastClassAttended ??
+      null,
+    lastTermYear:
+      (s.get("last_term_year") as string | null | undefined) ??
+      (s as unknown as { lastTermYear?: string | null }).lastTermYear ??
+      null,
+    previousReportCardFilename:
+      (s.get("previous_report_card_filename") as string | null | undefined) ??
+      (s as unknown as { previousReportCardFilename?: string | null }).previousReportCardFilename ??
+      null,
+    previousGrades:
+      (s.get("previous_grades") as string | null | undefined) ??
+      (s as unknown as { previousGrades?: string | null }).previousGrades ??
+      null,
+    transferReason:
+      (s.get("transfer_reason") as string | null | undefined) ??
+      (s as unknown as { transferReason?: string | null }).transferReason ??
+      null,
     parentAliveStatus:
       (s.get("parent_alive_status") as string | null | undefined) ??
       // Keep model-property fallback for runtime compatibility.

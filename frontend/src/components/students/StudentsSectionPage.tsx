@@ -60,9 +60,7 @@ export function StudentsSectionPage({
           title={
             classNameFilter
               ? `${t("students.tableCaption")} - ${classNameFilter}`
-              : section === "profiles"
-                ? t("students.page.profilesTitle")
-                : t("students.tableCaption")
+              : t("students.tableCaption")
           }
         />
       )}
