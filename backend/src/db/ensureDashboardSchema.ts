@@ -80,6 +80,36 @@ export async function ensureDashboardSchema(sequelize: Sequelize): Promise<void>
   );
   await addColumnIfMissing(
     sequelize,
+    "ALTER TABLE students ADD COLUMN previous_school_location VARCHAR(200) NULL",
+    "students.previous_school_location",
+  );
+  await addColumnIfMissing(
+    sequelize,
+    "ALTER TABLE students ADD COLUMN last_class_attended VARCHAR(120) NULL",
+    "students.last_class_attended",
+  );
+  await addColumnIfMissing(
+    sequelize,
+    "ALTER TABLE students ADD COLUMN last_term_year VARCHAR(40) NULL",
+    "students.last_term_year",
+  );
+  await addColumnIfMissing(
+    sequelize,
+    "ALTER TABLE students ADD COLUMN previous_report_card_filename VARCHAR(255) NULL",
+    "students.previous_report_card_filename",
+  );
+  await addColumnIfMissing(
+    sequelize,
+    "ALTER TABLE students ADD COLUMN previous_grades VARCHAR(200) NULL",
+    "students.previous_grades",
+  );
+  await addColumnIfMissing(
+    sequelize,
+    "ALTER TABLE students ADD COLUMN transfer_reason VARCHAR(120) NULL",
+    "students.transfer_reason",
+  );
+  await addColumnIfMissing(
+    sequelize,
     "ALTER TABLE students ADD COLUMN parent_alive_status VARCHAR(16) NULL",
     "students.parent_alive_status",
   );

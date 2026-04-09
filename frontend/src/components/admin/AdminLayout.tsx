@@ -39,7 +39,7 @@ type AdminLayoutProps = {
   /** Open a settings section from the sidebar (e.g. `modes`). */
   onSelectSettingsPanel?: (panel: string) => void;
   /** Students hub: open full-page list or admissions form. */
-  onSelectStudentSection?: (section: "all" | "admissions" | "profiles" | "import") => void;
+  onSelectStudentSection?: (section: "all" | "admissions" | "import") => void;
   /** Open class-specific list page. */
   onSelectClassList?: (className: string) => void;
   /** Refresh `/api/auth/me` after password or 2FA changes. */
@@ -354,7 +354,7 @@ type NavLeaf = {
   badge?: string;
   settingsPanel?: string;
   inboxList?: "notifications" | "messages";
-  studentSection?: "all" | "admissions" | "profiles" | "import";
+  studentSection?: "all" | "admissions" | "import";
 };
 
 type NavGroup = { id: string; title: string; icon: NavIcon; items: NavLeaf[] };
@@ -369,7 +369,6 @@ function buildNavGroups(t: (key: string) => string): NavGroup[] {
       items: [
         { icon: IconUsers, label: t("nav.students.all"), studentSection: "all" },
         { icon: IconClipboard, label: t("nav.students.admissions"), studentSection: "admissions" },
-        { icon: IconGradCap, label: t("nav.students.profiles"), studentSection: "profiles" },
         { icon: IconClipboard, label: t("nav.students.import"), studentSection: "import" },
       ],
     },

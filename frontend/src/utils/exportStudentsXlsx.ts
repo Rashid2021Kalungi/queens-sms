@@ -9,9 +9,7 @@ export function exportStudentsToXlsx(
     name: string;
     class: string;
     section: string;
-    roll: string;
     dob: string;
-    parentEmail: string;
     admitted: string;
     nationality: string;
     country: string;
@@ -25,9 +23,7 @@ export function exportStudentsToXlsx(
     columnLabels.name,
     columnLabels.class,
     columnLabels.section,
-    columnLabels.roll,
     columnLabels.dob,
-    columnLabels.parentEmail,
     columnLabels.admitted,
     columnLabels.nationality,
     columnLabels.country,
@@ -40,9 +36,7 @@ export function exportStudentsToXlsx(
     r.fullName,
     r.className ?? "",
     r.sectionName ?? "",
-    r.rollNumber ?? "",
     r.dateOfBirthFormatted ?? "",
-    r.parentEmail ?? "",
     r.admittedAt,
     r.nationality ?? "",
     r.countryName ?? r.countryCode ?? "",

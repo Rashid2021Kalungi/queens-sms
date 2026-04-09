@@ -4,7 +4,7 @@ import { NewAdmissionForm } from "./NewAdmissionForm";
 import { StudentsListPanel } from "./StudentsListPanel";
 import { useI18n } from "../../i18n/I18nProvider";
 
-export type StudentNavSection = "all" | "admissions" | "profiles" | "import";
+export type StudentNavSection = "all" | "admissions" | "import";
 
 export function StudentsSectionPage({
   section,
@@ -21,16 +21,12 @@ export function StudentsSectionPage({
       ? "students.page.admissionsTitle"
       : section === "import"
         ? "students.page.importTitle"
-      : section === "profiles"
-        ? "students.page.profilesTitle"
         : "students.page.allTitle";
   const introKey =
     section === "admissions"
       ? "students.page.introAdmissions"
       : section === "import"
         ? "students.page.introImport"
-      : section === "profiles"
-        ? "students.page.introProfiles"
         : "students.page.introAll";
 
   return (
@@ -53,9 +49,7 @@ export function StudentsSectionPage({
           title={
             classNameFilter
               ? `${t("students.tableCaption")} - ${classNameFilter}`
-              : section === "profiles"
-                ? t("students.page.profilesTitle")
-                : t("students.tableCaption")
+              : t("students.tableCaption")
           }
         />
       )}

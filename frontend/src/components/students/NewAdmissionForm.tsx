@@ -9,6 +9,7 @@ import {
   createStudent,
   fetchClassrooms,
   uploadStudentPhoto,
+  uploadStudentTransferReport,
   type ClassRoomOption,
 } from "../../api/students";
 import { useI18n } from "../../i18n/I18nProvider";
@@ -35,7 +36,6 @@ export function NewAdmissionForm({ onCreated }: NewAdmissionFormProps) {
   const [dateOfBirth, setDateOfBirth] = useState("");
   const [parentEmail, setParentEmail] = useState("");
   const [gender, setGender] = useState("");
-  const [rollNumber, setRollNumber] = useState("");
   const [sectionName, setSectionName] = useState("");
   const [classRoomId, setClassRoomId] = useState("");
   const [nationality, setNationality] = useState("");
@@ -43,6 +43,14 @@ export function NewAdmissionForm({ onCreated }: NewAdmissionFormProps) {
   const [district, setDistrict] = useState("");
   const [registrationType, setRegistrationType] = useState<"first" | "continuing">("first");
   const [previousSchool, setPreviousSchool] = useState("");
+  const [previousSchoolLocation, setPreviousSchoolLocation] = useState("");
+  const [lastClassAttended, setLastClassAttended] = useState("");
+  const [lastTermYear, setLastTermYear] = useState("");
+  const [previousGrades, setPreviousGrades] = useState("");
+  const [transferReason, setTransferReason] = useState<
+    "" | "relocation" | "discipline" | "better_education"
+  >("");
+  const [transferReportFile, setTransferReportFile] = useState<File | null>(null);
   const [parentAliveStatus, setParentAliveStatus] = useState<"both" | "one" | "none" | "">("");
   const [singleParentType, setSingleParentType] = useState<"mother" | "father" | "">("");
   const [parentFullName, setParentFullName] = useState("");
@@ -157,7 +165,6 @@ export function NewAdmissionForm({ onCreated }: NewAdmissionFormProps) {
     setDateOfBirth("");
     setParentEmail("");
     setGender("");
-    setRollNumber("");
     setSectionName("");
     setClassRoomId("");
     setNationality("");
@@ -166,6 +173,12 @@ export function NewAdmissionForm({ onCreated }: NewAdmissionFormProps) {
     setDistricts([]);
     setRegistrationType("first");
     setPreviousSchool("");
+    setPreviousSchoolLocation("");
+    setLastClassAttended("");
+    setLastTermYear("");
+    setPreviousGrades("");
+    setTransferReason("");
+    setTransferReportFile(null);
     setParentAliveStatus("");
     setSingleParentType("");
     setParentFullName("");
@@ -206,13 +219,19 @@ export function NewAdmissionForm({ onCreated }: NewAdmissionFormProps) {
         parentEmail: parentEmail.trim() || undefined,
         classRoomId: Number.isFinite(cr) && cr! > 0 ? cr : undefined,
         gender: gender.trim() || undefined,
-        rollNumber: rollNumber.trim() || undefined,
         sectionName: sectionName.trim() || undefined,
         nationality: nationality.trim() || undefined,
         countryCode: cc ? cc : undefined,
         district: dist || undefined,
         registrationType,
-        previousSchool: registrationType === "first" ? previousSchool.trim() : undefined,
+        previousSchool: registrationType === "continuing" ? previousSchool.trim() : undefined,
+        previousSchoolLocation:
+          registrationType === "continuing" ? previousSchoolLocation.trim() : undefined,
+        lastClassAttended:
+          registrationType === "continuing" ? lastClassAttended.trim() : undefined,
+        lastTermYear: registrationType === "continuing" ? lastTermYear.trim() : undefined,
+        previousGrades: registrationType === "continuing" ? previousGrades.trim() : undefined,
+        transferReason: registrationType === "continuing" && transferReason ? transferReason : undefined,
         parentAliveStatus: parentAliveStatus || undefined,
         parentFullName: parentFullName.trim() || undefined,
         parentPhone: parentPhone.trim() || undefined,
@@ -227,6 +246,20 @@ export function NewAdmissionForm({ onCreated }: NewAdmissionFormProps) {
         guardianName: guardianName.trim() || undefined,
         guardianPhone: guardianPhone.trim() || undefined,
       });
+      if (registrationType === "continuing") {
+        if (!transferReportFile) {
+          setFormError(t("students.form.transferReportRequired"));
+          setSubmitting(false);
+          return;
+        }
+        try {
+          await uploadStudentTransferReport(created.id, transferReportFile);
+        } catch {
+          setFormError(t("students.form.transferReportUploadError"));
+          setSubmitting(false);
+          return;
+        }
+      }
       if (photoFile) {
         try {
           await uploadStudentPhoto(created.id, photoFile);
@@ -397,14 +430,6 @@ export function NewAdmissionForm({ onCreated }: NewAdmissionFormProps) {
             />
           </label>
           <label className="block text-xs font-semibold text-[#636e72]">
-            {t("students.form.roll")}
-            <input
-              value={rollNumber}
-              onChange={(e) => setRollNumber(e.target.value)}
-              className={`${fieldClass} mt-1`}
-            />
-          </label>
-          <label className="block text-xs font-semibold text-[#636e72]">
             {t("students.form.section")}
             <input
               value={sectionName}
@@ -424,12 +449,20 @@ export function NewAdmissionForm({ onCreated }: NewAdmissionFormProps) {
               onChange={(e) => {
                 const v = e.target.value as "first" | "continuing";
                 setRegistrationType(v);
-                if (v === "continuing") setPreviousSchool("");
+                if (v === "first") {
+                  setPreviousSchool("");
+                  setPreviousSchoolLocation("");
+                  setLastClassAttended("");
+                  setLastTermYear("");
+                  setPreviousGrades("");
+                  setTransferReason("");
+                  setTransferReportFile(null);
+                }
               }}
               className={`${fieldClass} mt-1`}
             >
-              <option value="first">{t("students.form.registrationFirst")}</option>
-              <option value="continuing">{t("students.form.registrationContinuing")}</option>
+              <option value="first">{t("students.form.registrationNewAdmission")}</option>
+              <option value="continuing">{t("students.form.registrationTransferIn")}</option>
             </select>
           </label>
           <label className="block text-xs font-semibold text-[#636e72]">
@@ -479,16 +512,85 @@ export function NewAdmissionForm({ onCreated }: NewAdmissionFormProps) {
               ))}
             </select>
           </label>
-          {registrationType === "first" ? (
-            <label className="block min-w-0 text-xs font-semibold text-[#636e72] sm:col-span-2 lg:col-span-1">
-              {t("students.form.previousSchool")}
-              <input
-                value={previousSchool}
-                onChange={(e) => setPreviousSchool(e.target.value)}
-                className={`${fieldClass} mt-1`}
-                autoComplete="organization"
-              />
-            </label>
+          {registrationType === "continuing" ? (
+            <>
+              <label className="block min-w-0 text-xs font-semibold text-[#636e72]">
+                {t("students.form.previousSchool")} *
+                <input
+                  required
+                  value={previousSchool}
+                  onChange={(e) => setPreviousSchool(e.target.value)}
+                  className={`${fieldClass} mt-1`}
+                  autoComplete="organization"
+                />
+              </label>
+              <label className="block min-w-0 text-xs font-semibold text-[#636e72]">
+                {t("students.form.previousSchoolLocation")}
+                <input
+                  value={previousSchoolLocation}
+                  onChange={(e) => setPreviousSchoolLocation(e.target.value)}
+                  className={`${fieldClass} mt-1`}
+                />
+              </label>
+              <label className="block min-w-0 text-xs font-semibold text-[#636e72]">
+                {t("students.form.lastClassAttended")} *
+                <input
+                  required
+                  value={lastClassAttended}
+                  onChange={(e) => setLastClassAttended(e.target.value)}
+                  className={`${fieldClass} mt-1`}
+                />
+              </label>
+              <label className="block min-w-0 text-xs font-semibold text-[#636e72]">
+                {t("students.form.lastTermYear")} *
+                <input
+                  required
+                  value={lastTermYear}
+                  onChange={(e) => setLastTermYear(e.target.value)}
+                  className={`${fieldClass} mt-1`}
+                  placeholder={t("students.form.lastTermYearPlaceholder")}
+                />
+              </label>
+              <label className="block min-w-0 text-xs font-semibold text-[#636e72]">
+                {t("students.form.previousGrades")} *
+                <input
+                  required
+                  value={previousGrades}
+                  onChange={(e) => setPreviousGrades(e.target.value)}
+                  className={`${fieldClass} mt-1`}
+                  placeholder={t("students.form.previousGradesPlaceholder")}
+                />
+              </label>
+              <label className="block min-w-0 text-xs font-semibold text-[#636e72]">
+                {t("students.form.transferReason")}
+                <select
+                  value={transferReason}
+                  onChange={(e) =>
+                    setTransferReason(
+                      e.target.value as "" | "relocation" | "discipline" | "better_education",
+                    )
+                  }
+                  className={`${fieldClass} mt-1`}
+                >
+                  <option value="">{t("students.form.transferReasonUnset")}</option>
+                  <option value="relocation">{t("students.form.transferReasonRelocation")}</option>
+                  <option value="discipline">{t("students.form.transferReasonDiscipline")}</option>
+                  <option value="better_education">
+                    {t("students.form.transferReasonBetterEducation")}
+                  </option>
+                </select>
+              </label>
+              <label className="block text-xs font-semibold text-[#636e72] sm:col-span-2 lg:col-span-3">
+                {t("students.form.previousReportCard")} *
+                <input
+                  type="file"
+                  required
+                  accept="application/pdf,image/jpeg,image/png,image/webp"
+                  className="mt-1 block w-full text-xs text-[#636e72] file:mr-2 file:rounded-lg file:border-0 file:bg-[#d4e8f5] file:px-3 file:py-1.5 file:text-xs file:font-semibold file:text-[#2d3436]"
+                  onChange={(e) => setTransferReportFile(e.target.files?.[0] ?? null)}
+                />
+              </label>
+            </>
           ) : null}
           <label className="block min-w-0 text-xs font-semibold text-[#636e72]">
             {t("students.form.nationality")} *
