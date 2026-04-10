@@ -53,8 +53,26 @@ export type StudentApiRow = {
 export type ClassRoomOption = {
   id: number;
   name: string;
-  gradeLevel: string | null;
+  categoryId?: number | null;
+  categoryName?: string | null;
+  description?: string | null;
+  isActive?: boolean;
   academicYear: string;
+};
+
+export type ClassSectionOption = {
+  id: number;
+  classRoomId: number;
+  name: string;
+  classTeacherName?: string | null;
+  academicYear: string;
+};
+
+export type ClassCategoryOption = {
+  id: number;
+  name: string;
+  description: string | null;
+  classesCount?: number;
 };
 
 export type StudentSortBy = "date" | "id" | "name" | "class";
@@ -107,6 +125,195 @@ export async function fetchClassrooms(): Promise<ClassRoomOption[]> {
   }
   const data = await readJson<{ items: ClassRoomOption[] }>(res);
   return data.items;
+}
+
+export async function createClassroom(body: {
+  name: string;
+  categoryId: number;
+  description?: string;
+  academicYear?: string;
+}): Promise<ClassRoomOption> {
+  const res = await fetch(apiUrl("/api/me/classrooms"), {
+    method: "POST",
+    headers: { "Content-Type": "application/json", ...authHeaders() },
+    body: JSON.stringify(body),
+  });
+  if (res.status === 401) throw new Error("Unauthorized");
+  if (!res.ok) {
+    const err = await readJson<{ error?: string }>(res).catch(() => null);
+    throw new Error(err?.error ?? "Request failed");
+  }
+  const data = await readJson<{ item: ClassRoomOption }>(res);
+  return data.item;
+}
+
+export async function updateClassroom(
+  id: number,
+  body: { name?: string; categoryId?: number; description?: string },
+): Promise<ClassRoomOption> {
+  const res = await fetch(apiUrl(`/api/me/classrooms/${id}`), {
+    method: "PATCH",
+    headers: { "Content-Type": "application/json", ...authHeaders() },
+    body: JSON.stringify(body),
+  });
+  if (res.status === 401) throw new Error("Unauthorized");
+  if (!res.ok) {
+    const err = await readJson<{ error?: string }>(res).catch(() => null);
+    throw new Error(err?.error ?? "Request failed");
+  }
+  const data = await readJson<{ item: ClassRoomOption }>(res);
+  return data.item;
+}
+
+export async function deleteClassroom(id: number): Promise<void> {
+  const res = await fetch(apiUrl(`/api/me/classrooms/${id}`), {
+    method: "DELETE",
+    headers: { ...authHeaders() },
+  });
+  if (res.status === 401) throw new Error("Unauthorized");
+  if (!res.ok && res.status !== 204) {
+    const err = await readJson<{ error?: string }>(res).catch(() => null);
+    throw new Error(err?.error ?? "Request failed");
+  }
+}
+
+export async function disableClassroom(id: number): Promise<void> {
+  const res = await fetch(apiUrl(`/api/me/classrooms/${id}/disable`), {
+    method: "PATCH",
+    headers: { ...authHeaders() },
+  });
+  if (res.status === 401) throw new Error("Unauthorized");
+  if (!res.ok) {
+    const err = await readJson<{ error?: string }>(res).catch(() => null);
+    throw new Error(err?.error ?? "Request failed");
+  }
+}
+
+export async function fetchClassSections(classRoomId?: number): Promise<ClassSectionOption[]> {
+  const p = new URLSearchParams();
+  if (classRoomId != null) p.set("classRoomId", String(classRoomId));
+  const q = p.toString();
+  const res = await fetch(apiUrl(`/api/me/class-sections${q ? `?${q}` : ""}`), {
+    headers: { ...authHeaders() },
+  });
+  if (res.status === 401) throw new Error("Unauthorized");
+  if (!res.ok) {
+    const err = await readJson<{ error?: string }>(res).catch(() => null);
+    throw new Error(err?.error ?? "Request failed");
+  }
+  const data = await readJson<{ items: ClassSectionOption[] }>(res);
+  return data.items;
+}
+
+export async function createClassSection(body: {
+  classRoomId: number;
+  name: string;
+  classTeacherName?: string;
+  academicYear?: string;
+}): Promise<ClassSectionOption> {
+  const res = await fetch(apiUrl("/api/me/class-sections"), {
+    method: "POST",
+    headers: { "Content-Type": "application/json", ...authHeaders() },
+    body: JSON.stringify(body),
+  });
+  if (res.status === 401) throw new Error("Unauthorized");
+  if (!res.ok) {
+    const err = await readJson<{ error?: string }>(res).catch(() => null);
+    throw new Error(err?.error ?? "Request failed");
+  }
+  const data = await readJson<{ item: ClassSectionOption }>(res);
+  return data.item;
+}
+
+export async function updateClassSection(
+  id: number,
+  body: { classRoomId?: number; name?: string; classTeacherName?: string },
+): Promise<ClassSectionOption> {
+  const res = await fetch(apiUrl(`/api/me/class-sections/${id}`), {
+    method: "PATCH",
+    headers: { "Content-Type": "application/json", ...authHeaders() },
+    body: JSON.stringify(body),
+  });
+  if (res.status === 401) throw new Error("Unauthorized");
+  if (!res.ok) {
+    const err = await readJson<{ error?: string }>(res).catch(() => null);
+    throw new Error(err?.error ?? "Request failed");
+  }
+  const data = await readJson<{ item: ClassSectionOption }>(res);
+  return data.item;
+}
+
+export async function deleteClassSection(id: number): Promise<void> {
+  const res = await fetch(apiUrl(`/api/me/class-sections/${id}`), {
+    method: "DELETE",
+    headers: { ...authHeaders() },
+  });
+  if (res.status === 401) throw new Error("Unauthorized");
+  if (!res.ok && res.status !== 204) {
+    const err = await readJson<{ error?: string }>(res).catch(() => null);
+    throw new Error(err?.error ?? "Request failed");
+  }
+}
+
+export async function fetchClassCategories(): Promise<ClassCategoryOption[]> {
+  const res = await fetch(apiUrl("/api/me/class-categories"), {
+    headers: { ...authHeaders() },
+  });
+  if (res.status === 401) throw new Error("Unauthorized");
+  if (!res.ok) {
+    const err = await readJson<{ error?: string }>(res).catch(() => null);
+    throw new Error(err?.error ?? "Request failed");
+  }
+  const data = await readJson<{ items: ClassCategoryOption[] }>(res);
+  return data.items;
+}
+
+export async function createClassCategory(body: {
+  name: string;
+  description?: string;
+}): Promise<ClassCategoryOption> {
+  const res = await fetch(apiUrl("/api/me/class-categories"), {
+    method: "POST",
+    headers: { "Content-Type": "application/json", ...authHeaders() },
+    body: JSON.stringify(body),
+  });
+  if (res.status === 401) throw new Error("Unauthorized");
+  if (!res.ok) {
+    const err = await readJson<{ error?: string }>(res).catch(() => null);
+    throw new Error(err?.error ?? "Request failed");
+  }
+  const data = await readJson<{ item: ClassCategoryOption }>(res);
+  return data.item;
+}
+
+export async function updateClassCategory(
+  id: number,
+  body: { name?: string; description?: string },
+): Promise<ClassCategoryOption> {
+  const res = await fetch(apiUrl(`/api/me/class-categories/${id}`), {
+    method: "PATCH",
+    headers: { "Content-Type": "application/json", ...authHeaders() },
+    body: JSON.stringify(body),
+  });
+  if (res.status === 401) throw new Error("Unauthorized");
+  if (!res.ok) {
+    const err = await readJson<{ error?: string }>(res).catch(() => null);
+    throw new Error(err?.error ?? "Request failed");
+  }
+  const data = await readJson<{ item: ClassCategoryOption }>(res);
+  return data.item;
+}
+
+export async function deleteClassCategory(id: number): Promise<void> {
+  const res = await fetch(apiUrl(`/api/me/class-categories/${id}`), {
+    method: "DELETE",
+    headers: { ...authHeaders() },
+  });
+  if (res.status === 401) throw new Error("Unauthorized");
+  if (!res.ok && res.status !== 204) {
+    const err = await readJson<{ error?: string }>(res).catch(() => null);
+    throw new Error(err?.error ?? "Request failed");
+  }
 }
 
 export type CreateStudentBody = {

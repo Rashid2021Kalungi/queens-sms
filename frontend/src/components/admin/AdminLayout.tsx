@@ -381,19 +381,12 @@ function buildNavGroups(t: (key: string) => string): NavGroup[] {
       title: t("nav.classes"),
       icon: IconGrid,
       items: [
-        { icon: IconLayers, label: "Kindergarten (KG1-KG3)" },
-        { icon: IconGrid, label: "KG1" },
-        { icon: IconGrid, label: "KG2" },
-        { icon: IconGrid, label: "KG3" },
-        { icon: IconLayers, label: "Lower Primary (P1-P3)" },
-        { icon: IconGrid, label: "P1" },
-        { icon: IconGrid, label: "P2" },
-        { icon: IconGrid, label: "P3" },
-        { icon: IconLayers, label: "Upper Primary (P4-P7)" },
-        { icon: IconGrid, label: "P4" },
-        { icon: IconGrid, label: "P5" },
-        { icon: IconGrid, label: "P6" },
-        { icon: IconGrid, label: "P7" },
+        { icon: IconGrid, label: t("nav.classes.allClasses"), classSection: "all_classes" },
+        { icon: IconLayers, label: t("nav.classes.sectionsStreams"), classSection: "sections_streams" },
+        { icon: IconUsers, label: t("nav.classes.classStudents"), classSection: "class_students" },
+        { icon: IconGradCap, label: t("nav.classes.classTeachers"), classSection: "class_teachers" },
+        { icon: IconClipboard, label: t("nav.classes.classCategories"), classSection: "class_categories" },
+        { icon: IconChartBars, label: t("nav.classes.classReports"), classSection: "class_reports" },
       ],
     },
     {
@@ -946,7 +939,6 @@ export function AdminLayout({
                           );
                         })}
                       </ul>
-                    )
                   ) : null}
                 </div>
               );

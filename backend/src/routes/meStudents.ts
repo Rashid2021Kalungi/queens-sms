@@ -4,14 +4,14 @@ import fs from "node:fs/promises";
 import path from "node:path";
 import { Router } from "express";
 import multer from "multer";
-import { Op, Sequelize, type WhereOptions } from "sequelize";
+import { Op, Sequelize, fn, col, type WhereOptions } from "sequelize";
 import {
   districtAllowedForCountry,
   isKnownCountryCode,
 } from "../data/geoReference.js";
 import { parseQueryToIsoDate } from "../formatting/localeDate.js";
 import { studentToApiRow } from "../formatting/studentRow.js";
-import { ClassRoom, Student } from "../models/index.js";
+import { ClassCategory, ClassRoom, ClassSection, Student } from "../models/index.js";
 
 function studentUploadDir(): string {
   return path.join(process.cwd(), "uploads", "students");
@@ -281,28 +281,6 @@ export function createMeStudentsRouter() {
     return `${y}/${y + 1}`;
   }
 
-  async function ensureDefaultClassrooms(): Promise<void> {
-    const ay = currentAcademicYear();
-    const seeds: Array<{ name: string; gradeLevel: string }> = [
-      { name: "KG1", gradeLevel: "Lower Primary" },
-      { name: "KG2", gradeLevel: "Lower Primary" },
-      { name: "KG3", gradeLevel: "Lower Primary" },
-      { name: "P1", gradeLevel: "Upper Primary" },
-      { name: "P2", gradeLevel: "Upper Primary" },
-      { name: "P3", gradeLevel: "Upper Primary" },
-      { name: "P4", gradeLevel: "Upper Primary" },
-      { name: "P5", gradeLevel: "Upper Primary" },
-      { name: "P6", gradeLevel: "Upper Primary" },
-      { name: "P7", gradeLevel: "Upper Primary" },
-    ];
-    for (const s of seeds) {
-      await ClassRoom.findOrCreate({
-        where: { name: s.name, academicYear: ay },
-        defaults: { gradeLevel: s.gradeLevel },
-      });
-    }
-  }
-
   const bulkParser = multer({
     storage: multer.memoryStorage(),
     limits: { fileSize: 2 * 1024 * 1024 },
@@ -359,8 +337,8 @@ export function createMeStudentsRouter() {
 
   r.get("/classrooms", async (_req, res) => {
     try {
-      await ensureDefaultClassrooms();
       const rows = await ClassRoom.findAll({
+        include: [{ model: ClassCategory, as: "category", required: false }],
         order: [
           ["academicYear", "DESC"],
           ["name", "ASC"],
@@ -370,10 +348,310 @@ export function createMeStudentsRouter() {
         items: rows.map((c) => ({
           id: c.id,
           name: c.name,
-          gradeLevel: c.gradeLevel ?? null,
+          categoryId: (c.get("category_id") as number | null) ?? null,
+          categoryName:
+            ((c as unknown as { category?: { name?: string } | null }).category?.name as
+              | string
+              | undefined) ?? null,
+          description: (c.get("description") as string | null) ?? null,
+          isActive: ((c.get("is_active") as number | boolean | null) ?? 1) === 1 || c.get("is_active") === true,
           academicYear: c.academicYear,
         })),
       });
+    } catch (err) {
+      console.error(err);
+      return res.status(503).json({ error: "Database unavailable" });
+    }
+  });
+
+  r.post("/classrooms", async (req, res) => {
+    try {
+      const body = req.body as Record<string, unknown>;
+      const name = trimStr(body.name, 80);
+      const categoryId = parseOptionalId(body.categoryId);
+      const description = trimStr(body.description, 255);
+      const academicYear = trimStr(body.academicYear, 20) ?? currentAcademicYear();
+      if (!name) return res.status(400).json({ error: "Class name cannot be empty" });
+      if (!categoryId) return res.status(400).json({ error: "Class category is required" });
+      const category = await ClassCategory.findByPk(categoryId);
+      if (!category) return res.status(400).json({ error: "Invalid categoryId" });
+      const [row] = await ClassRoom.findOrCreate({
+        where: { name, academicYear },
+        defaults: { categoryId, description },
+      });
+      await row.update({ categoryId, description });
+      return res.status(201).json({
+        item: {
+          id: row.id,
+          name: row.name,
+          categoryId: (row.get("category_id") as number | null) ?? null,
+          description: (row.get("description") as string | null) ?? null,
+          isActive: ((row.get("is_active") as number | boolean | null) ?? 1) === 1 || row.get("is_active") === true,
+          academicYear: row.academicYear,
+        },
+      });
+    } catch (err) {
+      console.error(err);
+      return res.status(503).json({ error: "Database unavailable" });
+    }
+  });
+
+  r.patch("/classrooms/:id(\\d+)", async (req, res) => {
+    try {
+      const id = paramId(req);
+      if (!Number.isFinite(id) || id < 1) return res.status(400).json({ error: "Invalid id" });
+      const row = await ClassRoom.findByPk(id);
+      if (!row) return res.status(404).json({ error: "Not found" });
+      const body = req.body as Record<string, unknown>;
+      const name = trimStr(body.name, 80);
+      const description = trimStr(body.description, 255);
+      const categoryId = parseOptionalId(body.categoryId);
+      if (body.categoryId !== undefined) {
+        if (!categoryId) return res.status(400).json({ error: "categoryId is required" });
+        const category = await ClassCategory.findByPk(categoryId);
+        if (!category) return res.status(400).json({ error: "Invalid categoryId" });
+      }
+      await row.update({
+        ...(name ? { name } : {}),
+        ...(description !== null ? { description } : {}),
+        ...(categoryId ? { categoryId } : {}),
+      });
+      return res.json({
+        item: {
+          id: row.id,
+          name: row.name,
+          categoryId: (row.get("category_id") as number | null) ?? null,
+          description: (row.get("description") as string | null) ?? null,
+          isActive: ((row.get("is_active") as number | boolean | null) ?? 1) === 1 || row.get("is_active") === true,
+          academicYear: row.academicYear,
+        },
+      });
+    } catch (err) {
+      console.error(err);
+      return res.status(503).json({ error: "Database unavailable" });
+    }
+  });
+
+  r.delete("/classrooms/:id(\\d+)", async (req, res) => {
+    try {
+      const id = paramId(req);
+      if (!Number.isFinite(id) || id < 1) return res.status(400).json({ error: "Invalid id" });
+      const row = await ClassRoom.findByPk(id);
+      if (!row) return res.status(404).json({ error: "Not found" });
+      const allocated = await Student.count({ where: { classRoomId: id } });
+      if (allocated > 0) {
+        return res.status(409).json({
+          error:
+            "This class has students allocated. It cannot be deleted. Disable it instead.",
+          action: "disable_allowed",
+        });
+      }
+      await row.destroy();
+      return res.status(204).end();
+    } catch (err) {
+      console.error(err);
+      return res.status(503).json({ error: "Database unavailable" });
+    }
+  });
+
+  r.patch("/classrooms/:id(\\d+)/disable", async (req, res) => {
+    try {
+      const id = paramId(req);
+      if (!Number.isFinite(id) || id < 1) return res.status(400).json({ error: "Invalid id" });
+      const row = await ClassRoom.findByPk(id);
+      if (!row) return res.status(404).json({ error: "Not found" });
+      await row.update({ isActive: false });
+      return res.json({ ok: true });
+    } catch (err) {
+      console.error(err);
+      return res.status(503).json({ error: "Database unavailable" });
+    }
+  });
+
+  r.get("/class-categories", async (_req, res) => {
+    try {
+      const rows = await ClassCategory.findAll({
+        attributes: [
+          "id",
+          "name",
+          "description",
+          [fn("COUNT", col("classes.id")), "classesCount"],
+        ],
+        include: [{ model: ClassRoom, as: "classes", attributes: [], required: false }],
+        group: ["ClassCategory.id"],
+        order: [["name", "ASC"]],
+      });
+      return res.json({
+        items: rows.map((x) => ({
+          id: x.id,
+          name: x.name,
+          description: (x.get("description") as string | null) ?? null,
+          classesCount: Number(x.get("classesCount") ?? 0),
+        })),
+      });
+    } catch (err) {
+      console.error(err);
+      return res.status(503).json({ error: "Database unavailable" });
+    }
+  });
+
+  r.post("/class-categories", async (req, res) => {
+    try {
+      const body = req.body as Record<string, unknown>;
+      const name = trimStr(body.name, 80);
+      const description = trimStr(body.description, 255);
+      if (!name) return res.status(400).json({ error: "Category name cannot be empty" });
+      const [row] = await ClassCategory.findOrCreate({
+        where: { name },
+        defaults: { description },
+      });
+      if (description !== null) await row.update({ description });
+      return res.status(201).json({ item: { id: row.id, name: row.name, description: row.description } });
+    } catch (err) {
+      console.error(err);
+      return res.status(503).json({ error: "Database unavailable" });
+    }
+  });
+
+  r.patch("/class-categories/:id(\\d+)", async (req, res) => {
+    try {
+      const id = paramId(req);
+      if (!Number.isFinite(id) || id < 1) return res.status(400).json({ error: "Invalid id" });
+      const row = await ClassCategory.findByPk(id);
+      if (!row) return res.status(404).json({ error: "Not found" });
+      const body = req.body as Record<string, unknown>;
+      const name = trimStr(body.name, 80);
+      const description = trimStr(body.description, 255);
+      await row.update({
+        ...(name ? { name } : {}),
+        ...(description !== null ? { description } : {}),
+      });
+      return res.json({ item: { id: row.id, name: row.name, description: row.description } });
+    } catch (err) {
+      console.error(err);
+      return res.status(503).json({ error: "Database unavailable" });
+    }
+  });
+
+  r.delete("/class-categories/:id(\\d+)", async (req, res) => {
+    try {
+      const id = paramId(req);
+      if (!Number.isFinite(id) || id < 1) return res.status(400).json({ error: "Invalid id" });
+      const used = await ClassRoom.count({ where: { categoryId: id } });
+      if (used > 0) {
+        return res.status(409).json({ error: "Cannot delete category with assigned classes" });
+      }
+      const row = await ClassCategory.findByPk(id);
+      if (!row) return res.status(404).json({ error: "Not found" });
+      await row.destroy();
+      return res.status(204).end();
+    } catch (err) {
+      console.error(err);
+      return res.status(503).json({ error: "Database unavailable" });
+    }
+  });
+
+  r.get("/class-sections", async (req, res) => {
+    try {
+      const classRoomId = parseOptionalId(req.query.classRoomId);
+      if (classRoomId === undefined && req.query.classRoomId !== undefined) {
+        return res.status(400).json({ error: "Invalid classRoomId" });
+      }
+      const rows = await ClassSection.findAll({
+        where: classRoomId ? { classRoomId } : undefined,
+        order: [
+          ["academicYear", "DESC"],
+          ["name", "ASC"],
+        ],
+      });
+      return res.json({
+        items: rows.map((s) => ({
+          id: s.id,
+          classRoomId: s.classRoomId,
+          name: s.name,
+          classTeacherName: (s.get("class_teacher_name") as string | null) ?? null,
+          academicYear: s.academicYear,
+        })),
+      });
+    } catch (err) {
+      console.error(err);
+      return res.status(503).json({ error: "Database unavailable" });
+    }
+  });
+
+  r.post("/class-sections", async (req, res) => {
+    try {
+      const body = req.body as Record<string, unknown>;
+      const classRoomId = parseOptionalId(body.classRoomId);
+      const name = trimStr(body.name, 80);
+      const classTeacherName = trimStr(body.classTeacherName, 120);
+      const academicYear = trimStr(body.academicYear, 20) ?? currentAcademicYear();
+      if (!classRoomId) return res.status(400).json({ error: "Class is required for section" });
+      if (!name) return res.status(400).json({ error: "Section name cannot be empty" });
+      const room = await ClassRoom.findByPk(classRoomId);
+      if (!room) return res.status(400).json({ error: "Invalid classRoomId" });
+      const [row] = await ClassSection.findOrCreate({
+        where: { classRoomId, name, academicYear },
+        defaults: { classTeacherName },
+      });
+      if (classTeacherName !== null) await row.update({ classTeacherName });
+      return res.status(201).json({
+        item: {
+          id: row.id,
+          classRoomId: row.classRoomId,
+          name: row.name,
+          classTeacherName: (row.get("class_teacher_name") as string | null) ?? null,
+          academicYear: row.academicYear,
+        },
+      });
+    } catch (err) {
+      console.error(err);
+      return res.status(503).json({ error: "Database unavailable" });
+    }
+  });
+
+  r.patch("/class-sections/:id(\\d+)", async (req, res) => {
+    try {
+      const id = paramId(req);
+      if (!Number.isFinite(id) || id < 1) return res.status(400).json({ error: "Invalid id" });
+      const row = await ClassSection.findByPk(id);
+      if (!row) return res.status(404).json({ error: "Not found" });
+      const body = req.body as Record<string, unknown>;
+      const classRoomId = parseOptionalId(body.classRoomId);
+      const name = trimStr(body.name, 80);
+      const classTeacherName = trimStr(body.classTeacherName, 120);
+      if (classRoomId) {
+        const room = await ClassRoom.findByPk(classRoomId);
+        if (!room) return res.status(400).json({ error: "Invalid classRoomId" });
+      }
+      await row.update({
+        ...(classRoomId ? { classRoomId } : {}),
+        ...(name ? { name } : {}),
+        ...(classTeacherName !== null ? { classTeacherName } : {}),
+      });
+      return res.json({
+        item: {
+          id: row.id,
+          classRoomId: row.classRoomId,
+          name: row.name,
+          classTeacherName: (row.get("class_teacher_name") as string | null) ?? null,
+          academicYear: row.academicYear,
+        },
+      });
+    } catch (err) {
+      console.error(err);
+      return res.status(503).json({ error: "Database unavailable" });
+    }
+  });
+
+  r.delete("/class-sections/:id(\\d+)", async (req, res) => {
+    try {
+      const id = paramId(req);
+      if (!Number.isFinite(id) || id < 1) return res.status(400).json({ error: "Invalid id" });
+      const row = await ClassSection.findByPk(id);
+      if (!row) return res.status(404).json({ error: "Not found" });
+      await row.destroy();
+      return res.status(204).end();
     } catch (err) {
       console.error(err);
       return res.status(503).json({ error: "Database unavailable" });

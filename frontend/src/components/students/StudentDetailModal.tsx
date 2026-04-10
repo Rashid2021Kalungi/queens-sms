@@ -59,6 +59,8 @@ export function StudentDetailModal({
   const [district, setDistrict] = useState("");
   const [registrationType, setRegistrationType] = useState<"first" | "continuing">("first");
   const [previousSchool, setPreviousSchool] = useState("");
+  const [emergencyContactName, setEmergencyContactName] = useState("");
+  const [emergencyContactPhone, setEmergencyContactPhone] = useState("");
   const [saving, setSaving] = useState(false);
   const [confirmSaveOpen, setConfirmSaveOpen] = useState(false);
   const kindergartenRooms = rooms.filter((r) => /^KG[1-3]$/i.test(r.name.trim()));
@@ -116,6 +118,8 @@ export function StudentDetailModal({
           s.registrationType === "continuing" ? "continuing" : "first",
         );
         setPreviousSchool(s.previousSchool ?? "");
+        setEmergencyContactName(s.emergencyContactName ?? "");
+        setEmergencyContactPhone(s.emergencyContactPhone ?? "");
       })
       .catch((e) => {
         if (!cancelled) setError(e instanceof Error ? e.message : "Error");
@@ -171,7 +175,19 @@ export function StudentDetailModal({
 
   if (studentId == null) return null;
 
-  const reload = async (): Promise<StudentApiRow> => {
+  const resetUiSession = () => {
+    setEditing(false);
+    setSaving(false);
+    setError(null);
+    setDistrictsLoading(false);
+  };
+
+  const handleClosePanel = () => {
+    resetUiSession();
+    onClose();
+  };
+
+  const reload = async () => {
     const s = await fetchStudent(studentId);
     setRow(s);
     setFirstName(s.firstName);
@@ -226,6 +242,8 @@ export function StudentDetailModal({
           registrationType === "continuing"
             ? previousSchool.trim() || null
             : null,
+        emergencyContactName: emergencyContactName.trim() || null,
+        emergencyContactPhone: emergencyContactPhone.trim() || null,
       });
       const saved = await reload();
       setEditing(false);
@@ -316,7 +334,7 @@ export function StudentDetailModal({
           </h2>
           <button
             type="button"
-            onClick={onClose}
+            onClick={handleClosePanel}
             className="rounded-lg p-2 text-[#636e72] transition hover:bg-[#ebe4d9]/80 hover:text-[#2d3436]"
             aria-label={t("students.modal.close")}
           >
@@ -334,11 +352,6 @@ export function StudentDetailModal({
         <div className="p-5">
           {loading ? (
             <p className="text-sm text-[#636e72]">{t("students.loading")}</p>
-          ) : null}
-          {error ? (
-            <p className="mb-3 text-sm text-rose-700" role="alert">
-              {error}
-            </p>
           ) : null}
 
           {row && !loading ? (
@@ -438,6 +451,86 @@ export function StudentDetailModal({
                   <div className="flex justify-between gap-4 py-2">
                     <dt className="text-[#636e72]">{t("students.col.admitted")}</dt>
                     <dd className="font-medium text-[#2d3436]">{row.admittedAt}</dd>
+                  </div>
+                  <div className="flex justify-between gap-4 border-t border-[#f0ebe3] py-2">
+                    <dt className="text-[#636e72]">Middle name</dt>
+                    <dd className="font-medium text-[#2d3436]">{row.middleName ?? "—"}</dd>
+                  </div>
+                  <div className="flex justify-between gap-4 py-2">
+                    <dt className="text-[#636e72]">Previous school location</dt>
+                    <dd className="font-medium text-[#2d3436]">{row.previousSchoolLocation ?? "—"}</dd>
+                  </div>
+                  <div className="flex justify-between gap-4 py-2">
+                    <dt className="text-[#636e72]">Last class attended</dt>
+                    <dd className="font-medium text-[#2d3436]">{row.lastClassAttended ?? "—"}</dd>
+                  </div>
+                  <div className="flex justify-between gap-4 py-2">
+                    <dt className="text-[#636e72]">Last term/year</dt>
+                    <dd className="font-medium text-[#2d3436]">{row.lastTermYear ?? "—"}</dd>
+                  </div>
+                  <div className="flex justify-between gap-4 py-2">
+                    <dt className="text-[#636e72]">Previous report card</dt>
+                    <dd className="font-medium text-[#2d3436]">{row.previousReportCardFilename ?? "—"}</dd>
+                  </div>
+                  <div className="flex justify-between gap-4 py-2">
+                    <dt className="text-[#636e72]">Previous grades</dt>
+                    <dd className="font-medium text-[#2d3436]">{row.previousGrades ?? "—"}</dd>
+                  </div>
+                  <div className="flex justify-between gap-4 py-2">
+                    <dt className="text-[#636e72]">Transfer reason</dt>
+                    <dd className="font-medium text-[#2d3436]">{row.transferReason ?? "—"}</dd>
+                  </div>
+                  <div className="flex justify-between gap-4 py-2">
+                    <dt className="text-[#636e72]">Parent full name</dt>
+                    <dd className="font-medium text-[#2d3436]">{row.parentFullName ?? "—"}</dd>
+                  </div>
+                  <div className="flex justify-between gap-4 py-2">
+                    <dt className="text-[#636e72]">Parent phone</dt>
+                    <dd className="font-medium text-[#2d3436]">{row.parentPhone ?? "—"}</dd>
+                  </div>
+                  <div className="flex justify-between gap-4 py-2">
+                    <dt className="text-[#636e72]">Parent address</dt>
+                    <dd className="font-medium text-[#2d3436]">{row.parentAddress ?? "—"}</dd>
+                  </div>
+                  <div className="flex justify-between gap-4 py-2">
+                    <dt className="text-[#636e72]">Parent alive status</dt>
+                    <dd className="font-medium text-[#2d3436]">{row.parentAliveStatus ?? "—"}</dd>
+                  </div>
+                  <div className="flex justify-between gap-4 py-2">
+                    <dt className="text-[#636e72]">Religion</dt>
+                    <dd className="font-medium text-[#2d3436]">{row.religion ?? "—"}</dd>
+                  </div>
+                  <div className="flex justify-between gap-4 py-2">
+                    <dt className="text-[#636e72]">Special needs</dt>
+                    <dd className="font-medium text-[#2d3436]">{row.specialNeeds ?? "—"}</dd>
+                  </div>
+                  <div className="flex justify-between gap-4 py-2">
+                    <dt className="text-[#636e72]">Boarding status</dt>
+                    <dd className="font-medium text-[#2d3436]">{row.boardingStatus ?? "—"}</dd>
+                  </div>
+                  <div className="flex justify-between gap-4 py-2">
+                    <dt className="text-[#636e72]">Residence address</dt>
+                    <dd className="font-medium text-[#2d3436]">{row.residenceAddress ?? "—"}</dd>
+                  </div>
+                  <div className="flex justify-between gap-4 py-2">
+                    <dt className="text-[#636e72]">Medical info</dt>
+                    <dd className="font-medium text-[#2d3436]">{row.medicalInfo ?? "—"}</dd>
+                  </div>
+                  <div className="flex justify-between gap-4 py-2">
+                    <dt className="text-[#636e72]">Emergency contact name</dt>
+                    <dd className="font-medium text-[#2d3436]">{row.emergencyContactName ?? "—"}</dd>
+                  </div>
+                  <div className="flex justify-between gap-4 py-2">
+                    <dt className="text-[#636e72]">Emergency contact phone</dt>
+                    <dd className="font-medium text-[#2d3436]">{row.emergencyContactPhone ?? "—"}</dd>
+                  </div>
+                  <div className="flex justify-between gap-4 py-2">
+                    <dt className="text-[#636e72]">Guardian name</dt>
+                    <dd className="font-medium text-[#2d3436]">{row.guardianName ?? "—"}</dd>
+                  </div>
+                  <div className="flex justify-between gap-4 py-2">
+                    <dt className="text-[#636e72]">Guardian phone</dt>
+                    <dd className="font-medium text-[#2d3436]">{row.guardianPhone ?? "—"}</dd>
                   </div>
                 </dl>
               ) : (
@@ -572,6 +665,24 @@ export function StudentDetailModal({
                       className={`${fieldClass} mt-1`}
                       value={parentEmail}
                       onChange={(e) => setParentEmail(e.target.value)}
+                    />
+                  </label>
+                  <label className="block text-xs font-semibold text-[#636e72] sm:col-span-2">
+                    Emergency Contact Name *
+                    <input
+                      required
+                      className={`${fieldClass} mt-1`}
+                      value={emergencyContactName}
+                      onChange={(e) => setEmergencyContactName(e.target.value)}
+                    />
+                  </label>
+                  <label className="block text-xs font-semibold text-[#636e72] sm:col-span-2">
+                    Emergency Contact Phone *
+                    <input
+                      required
+                      className={`${fieldClass} mt-1`}
+                      value={emergencyContactPhone}
+                      onChange={(e) => setEmergencyContactPhone(e.target.value)}
                     />
                   </label>
                   <label className="block text-xs font-semibold text-[#636e72]">

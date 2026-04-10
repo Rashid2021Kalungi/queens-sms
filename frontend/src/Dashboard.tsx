@@ -686,7 +686,6 @@ export function Dashboard({
         setMainView("dashboard");
         setSettingsPanel(null);
         setInboxScreen({ screen: "home" });
-        setSelectedClassName(null);
       }}
       onSelectSettingsPanel={(panel) => {
         setInboxScreen({ screen: "home" });
@@ -697,7 +696,6 @@ export function Dashboard({
         setInboxScreen({ screen: "home" });
         setMainView("students");
         setStudentSection(section);
-        setSelectedClassName(null);
       }}
       onSelectStaffSection={(section) => {
         setSettingsPanel(null);
@@ -722,9 +720,8 @@ export function Dashboard({
       onSelectClassList={(className) => {
         setSettingsPanel(null);
         setInboxScreen({ screen: "home" });
-        setMainView("students");
-        setStudentSection("all");
-        setSelectedClassName(className);
+        setMainView("classes");
+        setClassesSection(section);
       }}
       onSelectFinanceSection={(section) => {
         setSettingsPanel(null);

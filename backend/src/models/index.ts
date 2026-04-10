@@ -30,7 +30,25 @@ export class SecurityOtpChallenge extends Model {
 export class ClassRoom extends Model {
   declare id: number;
   declare name: string;
-  declare gradeLevel: string | null;
+  declare categoryId: number | null;
+  declare description: string | null;
+  declare isActive: boolean;
+  declare academicYear: string;
+  declare readonly createdAt: Date;
+}
+
+export class ClassCategory extends Model {
+  declare id: number;
+  declare name: string;
+  declare description: string | null;
+  declare readonly createdAt: Date;
+}
+
+export class ClassSection extends Model {
+  declare id: number;
+  declare classRoomId: number;
+  declare name: string;
+  declare classTeacherName: string | null;
   declare academicYear: string;
   declare readonly createdAt: Date;
 }
@@ -241,7 +259,18 @@ export function setupDatabase(config: Config): Sequelize {
         primaryKey: true,
       },
       name: { type: DataTypes.STRING(120), allowNull: false },
-      gradeLevel: { type: DataTypes.STRING(50), field: "grade_level" },
+      categoryId: {
+        type: DataTypes.INTEGER.UNSIGNED,
+        allowNull: true,
+        field: "category_id",
+      },
+      description: { type: DataTypes.STRING(255), allowNull: true },
+      isActive: {
+        type: DataTypes.BOOLEAN,
+        allowNull: false,
+        defaultValue: true,
+        field: "is_active",
+      },
       academicYear: {
         type: DataTypes.STRING(20),
         allowNull: false,
@@ -258,6 +287,68 @@ export function setupDatabase(config: Config): Sequelize {
       sequelize,
       tableName: "classrooms",
       modelName: "ClassRoom",
+      timestamps: false,
+    },
+  );
+
+  ClassCategory.init(
+    {
+      id: {
+        type: DataTypes.INTEGER.UNSIGNED,
+        autoIncrement: true,
+        primaryKey: true,
+      },
+      name: { type: DataTypes.STRING(80), allowNull: false },
+      description: { type: DataTypes.STRING(255), allowNull: true },
+      createdAt: {
+        type: DataTypes.DATE,
+        allowNull: false,
+        field: "created_at",
+        defaultValue: DataTypes.NOW,
+      },
+    },
+    {
+      sequelize,
+      tableName: "class_categories",
+      modelName: "ClassCategory",
+      timestamps: false,
+    },
+  );
+
+  ClassSection.init(
+    {
+      id: {
+        type: DataTypes.INTEGER.UNSIGNED,
+        autoIncrement: true,
+        primaryKey: true,
+      },
+      classRoomId: {
+        type: DataTypes.INTEGER.UNSIGNED,
+        allowNull: false,
+        field: "class_room_id",
+      },
+      name: { type: DataTypes.STRING(80), allowNull: false },
+      classTeacherName: {
+        type: DataTypes.STRING(120),
+        allowNull: true,
+        field: "class_teacher_name",
+      },
+      academicYear: {
+        type: DataTypes.STRING(20),
+        allowNull: false,
+        field: "academic_year",
+      },
+      createdAt: {
+        type: DataTypes.DATE,
+        allowNull: false,
+        field: "created_at",
+        defaultValue: DataTypes.NOW,
+      },
+    },
+    {
+      sequelize,
+      tableName: "class_sections",
+      modelName: "ClassSection",
       timestamps: false,
     },
   );
@@ -438,6 +529,26 @@ export function setupDatabase(config: Config): Sequelize {
   ClassRoom.hasMany(Student, {
     foreignKey: "class_room_id",
     as: "students",
+    constraints: false,
+  });
+  ClassRoom.belongsTo(ClassCategory, {
+    foreignKey: "category_id",
+    as: "category",
+    constraints: false,
+  });
+  ClassCategory.hasMany(ClassRoom, {
+    foreignKey: "category_id",
+    as: "classes",
+    constraints: false,
+  });
+  ClassSection.belongsTo(ClassRoom, {
+    foreignKey: "class_room_id",
+    as: "classRoom",
+    constraints: false,
+  });
+  ClassRoom.hasMany(ClassSection, {
+    foreignKey: "class_room_id",
+    as: "sections",
     constraints: false,
   });
 

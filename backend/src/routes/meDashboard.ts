@@ -216,7 +216,7 @@ export function createMeDashboardRouter(config: Config) {
           admissionId: s.admissionNumber,
           admissionDate: safeLocaleDate(created),
           className: cr?.name ?? "—",
-          section: s.sectionName ?? cr?.gradeLevel ?? "—",
+          section: s.sectionName ?? "—",
         };
       });
 
