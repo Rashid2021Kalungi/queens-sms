@@ -1,4 +1,7 @@
 import { useEffect, useMemo, useState } from "react";
+import * as XLSX from "xlsx";
+import { jsPDF } from "jspdf";
+import autoTable from "jspdf-autotable";
 import {
   createClassCategory,
   createClassSection,
@@ -187,6 +190,145 @@ export function ClassesSectionPage({
     const streamsInClass = sections.filter((s) => s.classRoomId === selectedReportRoom.id).length;
     return { students: studentsInClass, streams: streamsInClass };
   }, [selectedReportRoom, students, sections]);
+
+  const reportRows = useMemo(() => {
+    if (!selectedReportRoom) return [];
+    const collator = new Intl.Collator(undefined, { sensitivity: "base" });
+    return students
+      .filter((s) => s.classRoomId === selectedReportRoom.id)
+      .slice()
+      .sort((a, b) => collator.compare(a.fullName, b.fullName));
+  }, [selectedReportRoom, students]);
+
+  const handleGenerateReport = async () => {
+    if (!selectedReportRoom) return;
+    const className = selectedReportRoom.name;
+    const term = reportTerm.trim() || t("classes.reports.termAny");
+    const stamp = new Date().toISOString().slice(0, 10);
+
+    if (reportType === "Excel") {
+      const wb = XLSX.utils.book_new();
+      const summarySheet = XLSX.utils.json_to_sheet([
+        {
+          Class: className,
+          Term: term,
+          Students: reportStats.students,
+          Streams: reportStats.streams,
+        },
+      ]);
+      const studentsSheet = XLSX.utils.json_to_sheet(
+        reportRows.map((s) => ({
+          Admission: s.admissionNumber,
+          Name: s.fullName,
+          Section: s.sectionName ?? "",
+          Gender: s.gender ?? "",
+        })),
+      );
+      XLSX.utils.book_append_sheet(wb, summarySheet, "Summary");
+      XLSX.utils.book_append_sheet(wb, studentsSheet, "Students");
+      XLSX.writeFile(wb, `class-report-${className.replace(/\s+/g, "-")}-${stamp}.xlsx`);
+      return;
+    }
+
+    const badgeMark = `<svg xmlns='http://www.w3.org/2000/svg' width='90' height='90' viewBox='0 0 90 90'>
+  <defs><linearGradient id='g' x1='0' y1='0' x2='1' y2='1'><stop offset='0' stop-color='#6a9570'/><stop offset='1' stop-color='#3f6b5a'/></linearGradient></defs>
+  <circle cx='45' cy='45' r='41' fill='url(#g)'/>
+  <circle cx='45' cy='45' r='34' fill='none' stroke='white' stroke-opacity='0.7' stroke-width='2'/>
+  <text x='45' y='51' text-anchor='middle' font-family='Arial' font-size='18' fill='white' font-weight='700'>QS</text>
+</svg>`;
+    const badgeUrl = `${window.location.origin}/school-badge.png`;
+    const teacherNames = [
+      ...new Set(
+        sections
+          .filter((s) => s.classRoomId === selectedReportRoom.id)
+          .map((s) => (s.classTeacherName ?? "").trim())
+          .filter(Boolean),
+      ),
+    ];
+    const teacherLabel = teacherNames.length > 0 ? teacherNames.join(", ") : "Not assigned";
+    const year = new Date().getFullYear();
+    const pdf = new jsPDF({ orientation: "portrait", unit: "pt", format: "a4" });
+    const pageW = pdf.internal.pageSize.getWidth();
+    const pageH = pdf.internal.pageSize.getHeight();
+
+    const drawWatermark = (dataUrl: string) => {
+      const wmW = pageW * 0.58;
+      const wmH = wmW;
+      const x = (pageW - wmW) / 2;
+      const y = (pageH - wmH) / 2 + 10;
+      pdf.addImage(dataUrl, "PNG", x, y, wmW, wmH, undefined, "FAST", 0);
+    };
+
+    const fallbackBadgeDataUrl = `data:image/svg+xml;utf8,${encodeURIComponent(badgeMark)}`;
+    const loadImageDataUrl = async (src: string, alpha = 1): Promise<string> =>
+      new Promise((resolve) => {
+        const img = new Image();
+        img.crossOrigin = "anonymous";
+        img.onload = () => {
+          const c = document.createElement("canvas");
+          c.width = img.naturalWidth || 300;
+          c.height = img.naturalHeight || 300;
+          const ctx = c.getContext("2d");
+          if (!ctx) return resolve(fallbackBadgeDataUrl);
+          ctx.clearRect(0, 0, c.width, c.height);
+          ctx.globalAlpha = alpha;
+          ctx.drawImage(img, 0, 0, c.width, c.height);
+          resolve(c.toDataURL("image/png"));
+        };
+        img.onerror = () => resolve(fallbackBadgeDataUrl);
+        img.src = src;
+      });
+
+    const wm = await loadImageDataUrl(badgeUrl, 0.12).catch(() => fallbackBadgeDataUrl);
+    const badge = await loadImageDataUrl(badgeUrl, 1).catch(() => fallbackBadgeDataUrl);
+    drawWatermark(wm);
+
+    pdf.addImage(badge, "PNG", 40, 26, 42, 42, undefined, "FAST");
+    pdf.setFontSize(15);
+    pdf.setTextColor(31, 63, 48);
+    pdf.text("Queens Nursery and Primary School", 92, 50);
+    pdf.setDrawColor(223, 232, 225);
+    pdf.line(40, 74, pageW - 40, 74);
+
+    autoTable(pdf, {
+      startY: 84,
+      theme: "grid",
+      styles: { fontSize: 10, cellPadding: 6, lineColor: [226, 226, 226], lineWidth: 0.6 },
+      body: [
+        ["Class", className, "Term", term],
+        ["Class Teacher(s)", teacherLabel, "Format", reportType],
+        ["Students", String(reportStats.students), "Streams / Sections", String(reportStats.streams)],
+      ],
+      columnStyles: {
+        0: { fontStyle: "bold", fillColor: [247, 247, 247], cellWidth: 120 },
+        1: { cellWidth: 170 },
+        2: { fontStyle: "bold", fillColor: [247, 247, 247], cellWidth: 130 },
+        3: { cellWidth: 120 },
+      },
+    });
+
+    autoTable(pdf, {
+      startY: (pdf as unknown as { lastAutoTable?: { finalY?: number } }).lastAutoTable?.finalY
+        ? ((pdf as unknown as { lastAutoTable: { finalY: number } }).lastAutoTable.finalY + 14)
+        : 180,
+      head: [["ADMISSION", "NAME", "SECTION", "GENDER"]],
+      body:
+        reportRows.length > 0
+          ? reportRows.map((s) => [s.admissionNumber, s.fullName, s.sectionName ?? "-", s.gender ?? "-"])
+          : [["-", "No students found", "-", "-"]],
+      theme: "grid",
+      headStyles: { fillColor: [239, 245, 241], textColor: [45, 52, 54], fontStyle: "bold", fontSize: 10 },
+      styles: { fontSize: 10, cellPadding: 6, lineColor: [221, 221, 221], lineWidth: 0.6 },
+    });
+
+    const footer = `Copyright © ${year} Queens Nursery and Primary School, Bunamwaya. All rights reserved.`;
+    pdf.setDrawColor(232, 232, 232);
+    pdf.line(40, pageH - 34, pageW - 40, pageH - 34);
+    pdf.setFontSize(9.5);
+    pdf.setTextColor(95, 107, 103);
+    pdf.text(footer, pageW / 2, pageH - 20, { align: "center" });
+    pdf.save(`class-report-${className.replace(/\s+/g, "-")}-${stamp}.pdf`);
+  };
 
   useEffect(() => {
     setRosterSectionFilter("");
@@ -1211,17 +1353,12 @@ export function ClassesSectionPage({
 
           <div className="mt-4 flex flex-wrap items-center justify-between gap-3">
             <p className="text-xs text-[#636e72]">
-              {reportClassId ? " " : t("classes.reports.helperSelectClass")}
+              {reportClassId ? t("classes.reports.previewReady") : t("classes.reports.helperSelectClass")}
             </p>
             <button
               type="button"
               disabled={!selectedReportRoom}
-              onClick={() => {
-                if (!selectedReportRoom) return;
-                window.alert(
-                  `Generating ${reportType} for ${selectedReportRoom.name}${reportTerm.trim() ? ` (${reportTerm.trim()})` : ""}.`,
-                );
-              }}
+              onClick={handleGenerateReport}
               className="rounded-lg bg-[#6a9570] px-4 py-2 text-sm font-semibold text-white transition hover:brightness-105 disabled:cursor-not-allowed disabled:opacity-60"
             >
               {t("classes.reports.btnGenerate")}
