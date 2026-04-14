@@ -1,0 +1,260 @@
+@import "tailwindcss";
+
+/* Soft UI palette — human-centered SaaS / neumorphic base */
+@layer base {
+  :root {
+    --cream: #f5f0e6;
+    --cream-light: #faf7f0;
+    --cream-mid: #ebe4d9;
+    --cream-shadow: rgba(200, 188, 170, 0.45);
+    --cream-highlight: rgba(255, 255, 255, 0.92);
+    --sage: #b8d8ba;
+    --sage-mid: #9dc6a0;
+    --sage-deep: #6a9570;
+    --sky: #b9d9eb;
+    --sky-mid: #9cc9e0;
+    --sky-deep: #5a8faf;
+    --blush: #f7d1cd;
+    --blush-deep: #e8a8a2;
+    --ink: #2d3436;
+    --ink-muted: #636e72;
+  }
+
+  body {
+    @apply antialiased;
+    background-color: var(--cream);
+    color: var(--ink);
+  }
+}
+
+@keyframes login-shake {
+  0%,
+  100% {
+    transform: translateX(0);
+  }
+  20%,
+  60% {
+    transform: translateX(-6px);
+  }
+  40%,
+  80% {
+    transform: translateX(6px);
+  }
+}
+
+@theme {
+  --animate-login-shake: login-shake 0.45s ease;
+}
+
+/* Neumorphic surfaces */
+@layer components {
+  .neo-app-bg {
+    background: linear-gradient(160deg, var(--cream-light) 0%, var(--cream) 40%, #efe8dc 100%);
+  }
+
+  .neo-sidebar {
+    background: linear-gradient(180deg, #e8f0e9 0%, #dce8de 45%, #d2e0d4 100%);
+    box-shadow:
+      inset -1px 0 0 var(--cream-highlight),
+      6px 0 28px rgba(106, 149, 112, 0.12);
+  }
+
+  .neo-header {
+    background: linear-gradient(180deg, rgba(255, 252, 248, 0.95) 0%, rgba(245, 240, 230, 0.92) 100%);
+    box-shadow:
+      0 2px 10px rgba(200, 188, 170, 0.2),
+      0 1px 0 var(--cream-highlight);
+    backdrop-filter: blur(10px);
+  }
+
+  .neo-footer {
+    background: linear-gradient(180deg, var(--cream-light), var(--cream-mid));
+    box-shadow: 0 -3px 12px rgba(200, 188, 170, 0.2);
+  }
+
+  .neo-card {
+    border-radius: 1.35rem;
+    background: linear-gradient(145deg, var(--cream-light), var(--cream-mid));
+    box-shadow:
+      7px 7px 16px var(--cream-shadow),
+      -6px -6px 14px var(--cream-highlight);
+  }
+
+  .neo-card-elevated {
+    border-radius: 1.35rem;
+    background: linear-gradient(145deg, #fffcf7, #f2ebe0);
+    box-shadow:
+      8px 8px 20px var(--cream-shadow),
+      -6px -6px 18px var(--cream-highlight);
+  }
+
+  .neo-inset {
+    border-radius: 9999px;
+    background: var(--cream-mid);
+    box-shadow:
+      inset 3px 3px 8px var(--cream-shadow),
+      inset -3px -3px 8px var(--cream-highlight);
+  }
+
+  .neo-inset-field {
+    border-radius: 0.75rem;
+    background: var(--cream-mid);
+    box-shadow:
+      inset 2px 2px 6px var(--cream-shadow),
+      inset -2px -2px 6px var(--cream-highlight);
+    border: none;
+  }
+
+  .neo-nav-group-active {
+    background: linear-gradient(145deg, #cde8cf, #b8d8ba);
+    color: var(--ink);
+    box-shadow:
+      3px 3px 10px rgba(120, 150, 125, 0.35),
+      -2px -2px 8px var(--cream-highlight);
+  }
+
+  .neo-nav-group-idle {
+    color: var(--ink-muted);
+    transition:
+      background 0.2s ease,
+      box-shadow 0.2s ease,
+      color 0.2s ease;
+  }
+
+  .neo-nav-group-idle:hover {
+    background: rgba(255, 255, 255, 0.35);
+    color: var(--ink);
+  }
+
+  .neo-nav-sub {
+    border-left: 3px solid rgba(157, 198, 160, 0.65);
+  }
+
+  .neo-nav-item:hover {
+    background: rgba(185, 217, 235, 0.35);
+    color: var(--ink);
+  }
+
+  .neo-logo {
+    background: linear-gradient(145deg, var(--sage), var(--sage-mid));
+    color: var(--ink);
+    box-shadow:
+      4px 4px 10px rgba(120, 150, 125, 0.4),
+      -2px -2px 6px var(--cream-highlight);
+  }
+
+  .neo-dropdown {
+    border-radius: 1.1rem;
+    background: linear-gradient(160deg, #fffcf8, var(--cream));
+    box-shadow:
+      10px 10px 28px var(--cream-shadow),
+      -4px -4px 16px var(--cream-highlight);
+  }
+
+  .neo-icon-btn {
+    border-radius: 9999px;
+    transition:
+      background 0.2s ease,
+      box-shadow 0.2s ease;
+  }
+
+  .neo-icon-btn:hover {
+    background: rgba(185, 217, 235, 0.45);
+    box-shadow:
+      2px 2px 6px var(--cream-shadow),
+      -2px -2px 6px var(--cream-highlight);
+  }
+
+  .neo-stat {
+    border-radius: 1.25rem;
+    box-shadow:
+      6px 6px 14px var(--cream-shadow),
+      -4px -4px 12px var(--cream-highlight);
+  }
+
+  /* Dark theme — scoped to admin shell (class set by ThemeProvider usage in AdminLayout) */
+  .theme-dark {
+    --cream: #1e242c;
+    --cream-light: #262d36;
+    --cream-mid: #323b47;
+    --cream-shadow: rgba(0, 0, 0, 0.45);
+    --cream-highlight: rgba(255, 255, 255, 0.06);
+    --sage: #4a6b4e;
+    --sage-mid: #5d8062;
+    --sage-deep: #8fb892;
+    --sky: #3d5a70;
+    --sky-mid: #4a6f8a;
+    --sky-deep: #7eb8d8;
+    --blush: #6b4545;
+    --blush-deep: #a87878;
+    --ink: #e8ecf0;
+    --ink-muted: #9aa5b0;
+    color-scheme: dark;
+  }
+
+  .theme-dark.neo-app-bg {
+    background: linear-gradient(160deg, var(--cream-light) 0%, var(--cream) 45%, #1a1f26 100%);
+  }
+
+  .theme-dark .neo-sidebar {
+    background: linear-gradient(180deg, #2a323c 0%, #242b34 50%, #1e252d 100%);
+    box-shadow:
+      inset -1px 0 0 rgba(255, 255, 255, 0.05),
+      6px 0 28px rgba(0, 0, 0, 0.35);
+    border-color: rgba(255, 255, 255, 0.06);
+  }
+
+  .theme-dark .neo-header {
+    background: linear-gradient(180deg, rgba(38, 45, 54, 0.98) 0%, rgba(30, 36, 44, 0.95) 100%);
+    box-shadow:
+      0 2px 10px rgba(0, 0, 0, 0.35),
+      0 1px 0 rgba(255, 255, 255, 0.05);
+    border-color: rgba(255, 255, 255, 0.08);
+  }
+
+  .theme-dark .neo-footer {
+    background: linear-gradient(180deg, var(--cream-light), var(--cream-mid));
+    box-shadow: 0 -3px 12px rgba(0, 0, 0, 0.3);
+  }
+
+  .theme-dark .neo-dropdown {
+    background: linear-gradient(160deg, #2c343e, #262d36);
+    box-shadow:
+      10px 10px 28px rgba(0, 0, 0, 0.45),
+      -4px -4px 16px rgba(255, 255, 255, 0.04);
+  }
+
+  .theme-dark [class*="#2d3436"] {
+    color: var(--ink) !important;
+  }
+
+  .theme-dark [class*="#636e72"] {
+    color: var(--ink-muted) !important;
+  }
+
+  /* Compact density */
+  [data-density="compact"] .neo-header > div {
+    @apply py-1 px-2 sm:px-3;
+  }
+
+  .dashboard-main-padding {
+    @apply p-4 sm:p-6;
+  }
+
+  [data-density="compact"] .dashboard-main-padding {
+    @apply p-3 sm:p-4;
+  }
+
+  [data-density="compact"] .neo-sidebar .flex.h-11 {
+    @apply h-10;
+  }
+}
+
+/* SVG clip reference; only on lg+ so mobile hero stays rectangular */
+@layer utilities {
+  @media (min-width: 1024px) {
+    .login-hero-wave {
+      clip-path: url(#queensLoginWaveClip);
+    }
+  }
+}
